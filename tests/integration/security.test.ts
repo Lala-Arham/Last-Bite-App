@@ -1,6 +1,6 @@
 // Sign-up rules and Row Level Security, exercised through the public Supabase API.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { LEGAL_VERSION } from '@/lib/legal/documents';
+import { DOCUMENTS } from '@/lib/legal/documents';
 import * as orders from '@/lib/orders';
 import { accepted, admin, anon, PASSWORD, restaurantWithOffer, signUp, supabaseAvailable, uid, visa } from '../support/db';
 
@@ -35,7 +35,7 @@ describe.skipIf(!available)('sign-up', () => {
     const db = admin();
     const terms = (await db.from('terms_acceptances').select('document, version').eq('user_id', u.id)).data!;
     expect(terms.map((t) => t.document).sort()).toEqual(['privacy', 'restaurant-agreement']);
-    expect(terms.every((t) => t.version === LEGAL_VERSION)).toBe(true);
+    expect(terms.every((t) => t.version === DOCUMENTS[t.document as keyof typeof DOCUMENTS].version)).toBe(true);
     const r = (await db.from('restaurants').select('*, restaurant_payment_accounts(*)').eq('owner_id', u.id).single()).data!;
     expect(r.status).toBe('pending');
     expect(r.lat).toBeCloseTo(47.6, 0); // placed at the ZIP code's center
@@ -44,7 +44,7 @@ describe.skipIf(!available)('sign-up', () => {
 
   it('keeps the database and app legal versions in sync', async () => {
     const { data } = await anon().from('legal_documents').select('id, version');
-    expect(data!.every((d) => d.version === LEGAL_VERSION)).toBe(true);
+    expect(Object.fromEntries(data!.map((d) => [d.id, d.version]))).toEqual(Object.fromEntries(Object.entries(DOCUMENTS).map(([id, d]) => [id, d.version])));
     expect(Object.keys(accepted('customer'))).toEqual(['customer-terms', 'privacy']);
   });
 });
@@ -73,6 +73,7 @@ describe.skipIf(!available)('row level security', () => {
   it('hides offers of restaurants that are not approved', async () => {
     const pending = await signUp('restaurant');
     const r = (await admin().from('restaurants').select('id').eq('owner_id', pending.id).single()).data!;
+    await admin().rpc('grant_subscription_year', { p_restaurant_id: r.id, p_note: 'test', p_by: null as unknown as string });
     const item = (await pending.client.from('menu_items').insert({ restaurant_id: r.id, name: 'Hidden Dish', price_cents: 900 }).select('id').single()).data!;
     const res = await pending.client.rpc('restaurant_save_offer', {
       p_offer_id: null as unknown as number, p_menu_item_id: item.id, p_reason: 'other', p_description: '', p_discount_pct: 50, p_quantity: 1, p_expires_in_minutes: 60,

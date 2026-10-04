@@ -28,6 +28,8 @@ export const serverEnv = {
     email: process.env.SUPPORT_EMAIL || 'support@lastbite.ca',
     address: process.env.LEGAL_ADDRESS || "St. John's, Newfoundland and Labrador",
   },
+  // Last Bite's GST/HST registration number, printed on subscription invoices.
+  hstNumber: process.env.HST_REGISTRATION_NUMBER ?? '',
   // Orders not picked up are released (never charged) this long after the discard timer ends.
   pickupGraceMinutes: int(process.env.PICKUP_GRACE_MINUTES, 10),
 };

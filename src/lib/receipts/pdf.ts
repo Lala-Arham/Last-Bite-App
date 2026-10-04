@@ -273,3 +273,85 @@ export function reportPdf(rep: Report) {
   );
   return finish(doc);
 }
+
+// ---------------------------------------------------------------- subscription invoice
+
+export type SubscriptionInvoice = {
+  invoiceNumber: string;
+  paidText: string;
+  periodText: string;
+  complimentary: boolean;
+  cardLabel: string;
+  feeCents: number;
+  taxRateBps: number;
+  taxCents: number;
+  totalCents: number;
+  note: string;
+  restaurant: { name: string; address: string; city: string; zip: string; phone: string };
+  seller: { entity: string; address: string; email: string; hstNumber: string };
+};
+
+// Invoice for one year of the partner subscription (portrait letter).
+export function subscriptionInvoicePdf(inv: SubscriptionInvoice) {
+  const doc = new PDFDocument({ size: 'LETTER', margin: 50, info: { Title: `Last Bite invoice ${inv.invoiceNumber}`, Author: 'Last Bite' } });
+  fonts(doc);
+  const L = 50;
+  const R = doc.page.width - 50;
+  const W = R - L;
+  doc.image(LOGO, L, 46, { height: 40 });
+  doc.font('head').fontSize(22).fillColor(INK).text('Invoice', L, 46, { width: W, align: 'right' });
+  doc.font('regular').fontSize(9.5).fillColor(MUTED).text(inv.invoiceNumber, L, 74, { width: W, align: 'right' });
+  rule(doc, L, R, 104);
+
+  const half = W / 2 - 10;
+  label(doc, 'FROM', L, 120);
+  doc.font('bold').fontSize(10.5).fillColor(INK).text(inv.seller.entity, L, 134, { width: half });
+  doc.font('regular').fontSize(9.5).fillColor(INK).text([inv.seller.address, inv.seller.email, inv.seller.hstNumber && `HST registration: ${inv.seller.hstNumber}`].filter(Boolean).join('\n'), { width: half, lineGap: 2 });
+  label(doc, 'BILL TO', L + half + 20, 120);
+  const r = inv.restaurant;
+  doc.font('bold').fontSize(10.5).fillColor(INK).text(r.name, L + half + 20, 134, { width: half });
+  doc.font('regular').fontSize(9.5).fillColor(INK).text([r.address, `${r.city}, NL ${r.zip}`, r.phone].filter(Boolean).join('\n'), { width: half, lineGap: 2 });
+
+  let y = 220;
+  const facts: [string, string][] = [['DATE', inv.paidText], ['SERVICE PERIOD', inv.periodText], ['PAYMENT', inv.complimentary ? 'Complimentary' : inv.cardLabel || 'Card']];
+  const fw = (W - 16) / 3;
+  facts.forEach(([k, v], i) => {
+    const x = L + i * (fw + 8);
+    doc.roundedRect(x, y, fw, 46, 8).fill('#fff4ec');
+    label(doc, k, x + 10, y + 9, { width: fw - 20 });
+    doc.font('medium').fontSize(9.5).fillColor(INK).text(v, x + 10, y + 23, { width: fw - 20 });
+  });
+
+  y += 76;
+  doc.rect(L, y, W, 22).fill(INK);
+  doc.font('bold').fontSize(8.5).fillColor('#ffffff').text('DESCRIPTION', L + 10, y + 7);
+  doc.text('AMOUNT', L, y + 7, { width: W - 10, align: 'right' });
+  y += 32;
+  const line = (text: string, amount: string, opts: { bold?: boolean; size?: number; muted?: boolean } = {}) => {
+    doc.font(opts.bold ? 'bold' : 'regular').fontSize(opts.size ?? 10).fillColor(opts.muted ? MUTED : INK);
+    doc.text(text, L + 10, y, { width: W - 140 });
+    doc.text(amount, L, y, { width: W - 10, align: 'right' });
+    y = Math.max(doc.y, y + 14) + 8;
+  };
+  line('Last Bite partner subscription, 1 year', money(inv.feeCents), { bold: true });
+  doc.font('regular').fontSize(8.5).fillColor(MUTED).text(
+    'Access to the Last Bite marketplace and Partner Portal: posting surplus food offers, order alerts, PIN-verified pickups, Stripe Connect payouts and daily sales reports. No commission on food sales.',
+    L + 10, y - 4, { width: W - 160, lineGap: 1.5 },
+  );
+  y = doc.y + 12;
+  rule(doc, L, R, y);
+  y += 12;
+  line('Subtotal', money(inv.feeCents));
+  line(`HST (${pct(inv.taxRateBps)})`, money(inv.taxCents));
+  rule(doc, L + W / 2, R, y - 2);
+  y += 6;
+  line(inv.complimentary ? 'Total (complimentary)' : 'Total paid (CAD)', money(inv.totalCents), { bold: true, size: 13 });
+  if (inv.note) line(`Note: ${inv.note}`, '', { muted: true, size: 9 });
+
+  doc.font('regular').fontSize(8).fillColor(MUTED).text(
+    `Thank you for rescuing good food with Last Bite. Questions about this invoice: ${inv.seller.email}. `
+      + 'The subscription is governed by section 5.3 of the Restaurant Partner Agreement. Times in Newfoundland Time.',
+    L, doc.page.height - 90, { width: W, align: 'center', lineGap: 1.5 },
+  );
+  return finish(doc);
+}

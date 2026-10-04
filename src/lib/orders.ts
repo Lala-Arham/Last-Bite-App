@@ -36,7 +36,7 @@ const bankDetails = (acct: { id: string; bank: string }) =>
 
 // ---------------------------------------------------------------- checkout
 
-async function ensureCustomer(userId: string) {
+export async function ensureCustomer(userId: string) {
   const profile = must(await db().from('profiles').select('email, username, stripe_customer_id').eq('id', userId).single());
   if (profile.stripe_customer_id) return profile.stripe_customer_id;
   const id = await payments().ensureCustomer({ email: profile.email, username: profile.username });

@@ -6,6 +6,7 @@ import { requireActor } from '@/lib/auth';
 import { action, AppError, check, must } from '@/lib/errors';
 import { money } from '@/lib/format';
 import * as orders from '@/lib/orders';
+import * as subscriptions from '@/lib/subscriptions';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { SUSPENSION_DAYS } from '@/lib/constants';
 import { dollars, int, parse } from '@/lib/validate';
@@ -154,6 +155,18 @@ export async function payRestaurant(input: unknown) {
   });
 }
 
+// A complimentary subscription year (no charge), added after any year already paid.
+export async function grantSubscriptionYear(input: unknown) {
+  return action(async () => {
+    const me = await requireActor('admin');
+    const d = parse(z.object({ restaurantId: z.number().int(), note: note('Reason', 3) }), input);
+    const p = await subscriptions.grantYear(d.restaurantId, d.note, me.id);
+    const r = must(await db().from('restaurants').select('name').eq('id', d.restaurantId).single());
+    await log(me.id, 'subscription.grant', 'restaurant', d.restaurantId, `${r.name}: complimentary year to ${p.period_end?.slice(0, 10)} (${p.invoice_number}) - ${d.note}`);
+    return { paidThrough: p.period_end };
+  });
+}
+
 export async function updateSettings(input: unknown) {
   return action(async () => {
     const me = await requireActor('admin');
@@ -162,6 +175,8 @@ export async function updateSettings(input: unknown) {
         serviceFeePct: z.coerce.number().min(0, 'Service fee must be 0% to 30%.').max(30, 'Service fee must be 0% to 30%.'),
         defaultTaxRatePct: z.coerce.number().min(0, 'HST must be 0% to 20%.').max(20, 'HST must be 0% to 20%.'),
         requireRestaurantApproval: z.boolean(),
+        subscriptionFee: z.coerce.number().min(0, 'Subscription fee must be $0 to $10,000.').max(10_000, 'Subscription fee must be $0 to $10,000.'),
+        requireSubscription: z.boolean(),
       }),
       input,
     );
@@ -169,6 +184,8 @@ export async function updateSettings(input: unknown) {
       service_fee_bps: Math.round(d.serviceFeePct * 100),
       default_tax_rate_bps: Math.round(d.defaultTaxRatePct * 100),
       require_restaurant_approval: d.requireRestaurantApproval,
+      subscription_fee_cents: Math.round(d.subscriptionFee * 100),
+      require_subscription: d.requireSubscription,
     };
     const current = new Map(must(await db().from('settings').select('key, value')).map((r) => [r.key, r.value]));
     const changed = Object.entries(values).filter(([k, v]) => current.get(k) !== v);

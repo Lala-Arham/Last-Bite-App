@@ -53,6 +53,16 @@ Last Bite is a marketplace where restaurants in St. John's, Newfoundland and Lab
 | **Refund to original payment** | money back to their card (credit part back to their balance) | gives up its share (the transfer is partially reversed) | gives up its fee share |
 | **Refund as platform credit** | credit for future orders | keeps its full payment | pays for the credit |
 
+### Restaurant subscription
+
+Restaurants pay an annual **partner subscription** ($100 plus 15% HST = $115 by default) in the Partner Portal's **Subscription** tab. There is no commission on food sales. How it works:
+
+- **One year per payment, no auto-renewal.** The card is charged once, on Last Bite's own Stripe account (not Connect). Renewing early (allowed from 60 days before the end) adds the new year after the current one.
+- **Needed to post offers.** Without an active subscription a restaurant can't post or resume offers. Offers already live run until their timers end, and pickups and payouts keep working. The dashboard shows a banner when there is no subscription, and a reminder 30 days before it ends.
+- **Invoices.** Each paid year gets an invoice number (`SUB-YYYYMMDD-000001`) and a PDF invoice showing the HST. Set `HST_REGISTRATION_NUMBER` to print Last Bite's GST/HST number on it.
+- **Admin controls.** In the owner console, **Restaurants** shows each subscription and has a **Free year** button (recorded in the audit log). **Settings** changes the yearly fee or turns the requirement off.
+- **Refunds** (for example when a restaurant isn't approved; see section 5.3 of the Partner Agreement) are made in the Stripe Dashboard.
+
 With Stripe Connect, card holds are **destination charges** (`transfer_data.destination`) when the restaurant's Stripe account is ready. At capture Last Bite sets an **application fee** (service fee + tax), so Stripe moves the food subtotal to the restaurant. Restaurants that haven't connected Stripe yet are charged on the platform and paid later from the owner console.
 
 ## Project layout
@@ -182,7 +192,7 @@ To keep the app running in the background on Windows instead, use WSL 2 with sys
 ## Deploy
 
 1. **Supabase:** create a project, then `npx supabase link --project-ref <ref>` and `npx supabase db push` to apply the migrations. In Auth settings, set the Site URL, add `https://<your-site>/auth/confirm` as a redirect URL, and turn on **Confirm email**. Enable the `pg_cron` extension (Database → Extensions) before pushing, or schedule `/api/cron/sweep` instead.
-2. **Stripe:** turn on Connect (Express accounts). Add a webhook endpoint `https://<your-site>/api/stripe/webhook` for `account.updated` (connected accounts), `payment_intent.amount_capturable_updated` and `payment_intent.payment_failed`.
+2. **Stripe:** turn on Connect (Express accounts). Add a webhook endpoint `https://<your-site>/api/stripe/webhook` for `account.updated` (connected accounts), `payment_intent.amount_capturable_updated`, `payment_intent.succeeded` (subscription payments) and `payment_intent.payment_failed`.
 3. **Vercel (or any Node host):** set the variables from `.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`, Stripe keys, `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET`, company details). `vercel.json` calls `/api/cron/sweep` every 5 minutes, which voids card holds of released orders.
 4. Create your owner account with `npm run create-admin` (pointing `.env.local` at the production project).
 
@@ -204,7 +214,7 @@ Keep **Authentication → URL Configuration → Site URL** set to your site's ad
 
 ## Legal documents
 
-Customer Terms, Restaurant Partner Agreement and Privacy Policy live in `src/lib/legal/documents.ts` (version `2026-10-01.1`, written for Newfoundland and Labrador and Canada) and are shown at `/legal/...`. When you change the text, bump `LEGAL_VERSION` and add a migration updating `legal_documents`; a test checks they match. Signed-in users are then asked to accept the new version (declining signs them out). Have a lawyer licensed in Newfoundland and Labrador review them before launch.
+Customer Terms, Restaurant Partner Agreement and Privacy Policy live in `src/lib/legal/documents.ts` (written for Newfoundland and Labrador and Canada) and are shown at `/legal/...`. Each document has its own version in `DOCUMENTS` (the Partner Agreement is `2026-10-04.1`, which added the subscription; the others are `2026-10-01.1`). When you change a document's text, bump its version there and add a migration updating `legal_documents`; a test checks they match. Signed-in users are then asked to accept the new version (declining signs them out). Have a lawyer licensed in Newfoundland and Labrador review them before launch.
 
 ## Upgrading from the first version
 

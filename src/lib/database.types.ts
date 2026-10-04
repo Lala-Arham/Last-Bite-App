@@ -381,6 +381,37 @@ isOneToOne: true
                   Relationships: [
                     
                   ]
+                },"subscription_payments": {
+                  Row: {
+                    "card_label": string,"created_at": string,"created_by": string | null,"fee_cents": number,"id": number,"invoice_number": string | null,"kind": Database["public"]['Enums']["subscription_payment_kind"],"note": string,"paid_at": string | null,"payment_ref": string | null,"period_end": string | null,"period_start": string | null,"restaurant_id": number,"status": Database["public"]['Enums']["subscription_payment_status"],"tax_cents": number,"tax_rate_bps": number,"total_cents": number
+                  }
+                  Insert: {
+                    "card_label"?: string,"created_at"?: string,"created_by"?: string | null,"fee_cents": number,"id"?: number,"invoice_number"?: string | null,"kind"?: Database["public"]['Enums']["subscription_payment_kind"],"note"?: string,"paid_at"?: string | null,"payment_ref"?: string | null,"period_end"?: string | null,"period_start"?: string | null,"restaurant_id": number,"status"?: Database["public"]['Enums']["subscription_payment_status"],"tax_cents": number,"tax_rate_bps": number,"total_cents": number
+                  }
+                  Update: {
+                    "card_label"?: string,"created_at"?: string,"created_by"?: string | null,"fee_cents"?: number,"id"?: number,"invoice_number"?: string | null,"kind"?: Database["public"]['Enums']["subscription_payment_kind"],"note"?: string,"paid_at"?: string | null,"payment_ref"?: string | null,"period_end"?: string | null,"period_start"?: string | null,"restaurant_id"?: number,"status"?: Database["public"]['Enums']["subscription_payment_status"],"tax_cents"?: number,"tax_rate_bps"?: number,"total_cents"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "subscription_payments_created_by_fkey"
+      columns: ["created_by"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "subscription_payments_restaurant_id_fkey"
+      columns: ["restaurant_id"]
+isOneToOne: false
+      referencedRelation: "restaurant_balances"
+      referencedColumns: ["restaurant_id"]
+    },{
+      foreignKeyName: "subscription_payments_restaurant_id_fkey"
+      columns: ["restaurant_id"]
+isOneToOne: false
+      referencedRelation: "restaurants"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"terms_acceptances": {
                   Row: {
                     "accepted_at": string,"document": string,"id": number,"ip": string,"user_agent": string,"user_id": string,"version": string
@@ -464,6 +495,12 @@ isOneToOne: false
 "_random_pin":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"_subscription_price":
+{ Args: Record<PropertyKey, never>; Returns: Json
+                           },
+"_subscription_renewable":
+{ Args: { "p_paid_through": string }; Returns: boolean
+                           },
 "abort_pickup":
 { Args: { "p_order_id": number }; Returns: undefined
                            },
@@ -509,6 +546,32 @@ isOneToOne: false
                           SetofOptions: {
         from: "*"
         to: "orders"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"begin_subscription_payment":
+{ Args: { "p_restaurant_id": number }; Returns: {
+              "card_label": string,
+"created_at": string,
+"created_by": string | null,
+"fee_cents": number,
+"id": number,
+"invoice_number": string | null,
+"kind": Database["public"]['Enums']["subscription_payment_kind"],
+"note": string,
+"paid_at": string | null,
+"payment_ref": string | null,
+"period_end": string | null,
+"period_start": string | null,
+"restaurant_id": number,
+"status": Database["public"]['Enums']["subscription_payment_status"],
+"tax_cents": number,
+"tax_rate_bps": number,
+"total_cents": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "subscription_payments"
         isOneToOne: true
         isSetofReturn: false
       } },
@@ -560,6 +623,58 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"finish_subscription_payment":
+{ Args: { "p_card_label": string,"p_id": number,"p_payment_ref": string }; Returns: {
+              "card_label": string,
+"created_at": string,
+"created_by": string | null,
+"fee_cents": number,
+"id": number,
+"invoice_number": string | null,
+"kind": Database["public"]['Enums']["subscription_payment_kind"],
+"note": string,
+"paid_at": string | null,
+"payment_ref": string | null,
+"period_end": string | null,
+"period_start": string | null,
+"restaurant_id": number,
+"status": Database["public"]['Enums']["subscription_payment_status"],
+"tax_cents": number,
+"tax_rate_bps": number,
+"total_cents": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "subscription_payments"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"grant_subscription_year":
+{ Args: { "p_by": string,"p_note": string,"p_restaurant_id": number }; Returns: {
+              "card_label": string,
+"created_at": string,
+"created_by": string | null,
+"fee_cents": number,
+"id": number,
+"invoice_number": string | null,
+"kind": Database["public"]['Enums']["subscription_payment_kind"],
+"note": string,
+"paid_at": string | null,
+"payment_ref": string | null,
+"period_end": string | null,
+"period_start": string | null,
+"restaurant_id": number,
+"status": Database["public"]['Enums']["subscription_payment_status"],
+"tax_cents": number,
+"tax_rate_bps": number,
+"total_cents": number
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "subscription_payments"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "is_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
@@ -577,6 +692,9 @@ isOneToOne: false
                            },
 "my_restaurant_id":
 { Args: Record<PropertyKey, never>; Returns: number
+                           },
+"my_subscription":
+{ Args: Record<PropertyKey, never>; Returns: Json
                            },
 "pending_terms":
 { Args: Record<PropertyKey, never>; Returns: {
@@ -768,6 +886,12 @@ isOneToOne: false
 "setting_int":
 { Args: { "p_key": string }; Returns: number
                            },
+"subscription_active":
+{ Args: { "p_restaurant_id": number }; Returns: boolean
+                           },
+"subscription_paid_through":
+{ Args: { "p_restaurant_id": number }; Returns: string
+                           },
 "sweep":
 { Args: Record<PropertyKey, never>; Returns: Json
                            },
@@ -776,7 +900,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "account_status": "active"|"suspended"|"deleted","credit_kind": "refund"|"goodwill"|"redeem"|"restore"|"adjustment","offer_reason": "wrong_order"|"delayed_order"|"unclaimed_order"|"overproduction"|"end_of_day"|"other","offer_status": "active"|"paused"|"ended","order_status": "pending_payment"|"reserved"|"picked_up"|"cancelled"|"expired"|"failed","payout_kind": "transfer"|"reversal"|"manual","refund_method": "original"|"credit","restaurant_status": "pending"|"approved"|"suspended","user_role": "customer"|"restaurant"|"admin"
+            "account_status": "active"|"suspended"|"deleted","credit_kind": "refund"|"goodwill"|"redeem"|"restore"|"adjustment","offer_reason": "wrong_order"|"delayed_order"|"unclaimed_order"|"overproduction"|"end_of_day"|"other","offer_status": "active"|"paused"|"ended","order_status": "pending_payment"|"reserved"|"picked_up"|"cancelled"|"expired"|"failed","payout_kind": "transfer"|"reversal"|"manual","refund_method": "original"|"credit","restaurant_status": "pending"|"approved"|"suspended","subscription_payment_kind": "card"|"complimentary","subscription_payment_status": "pending"|"paid"|"failed","user_role": "customer"|"restaurant"|"admin"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -892,7 +1016,7 @@ export type CompositeTypes<
 export const Constants = {
   "public": {
           Enums: {
-            "account_status": ["active", "suspended", "deleted"],"credit_kind": ["refund", "goodwill", "redeem", "restore", "adjustment"],"offer_reason": ["wrong_order", "delayed_order", "unclaimed_order", "overproduction", "end_of_day", "other"],"offer_status": ["active", "paused", "ended"],"order_status": ["pending_payment", "reserved", "picked_up", "cancelled", "expired", "failed"],"payout_kind": ["transfer", "reversal", "manual"],"refund_method": ["original", "credit"],"restaurant_status": ["pending", "approved", "suspended"],"user_role": ["customer", "restaurant", "admin"]
+            "account_status": ["active", "suspended", "deleted"],"credit_kind": ["refund", "goodwill", "redeem", "restore", "adjustment"],"offer_reason": ["wrong_order", "delayed_order", "unclaimed_order", "overproduction", "end_of_day", "other"],"offer_status": ["active", "paused", "ended"],"order_status": ["pending_payment", "reserved", "picked_up", "cancelled", "expired", "failed"],"payout_kind": ["transfer", "reversal", "manual"],"refund_method": ["original", "credit"],"restaurant_status": ["pending", "approved", "suspended"],"subscription_payment_kind": ["card", "complimentary"],"subscription_payment_status": ["pending", "paid", "failed"],"user_role": ["customer", "restaurant", "admin"]
           }
         }
 } as const

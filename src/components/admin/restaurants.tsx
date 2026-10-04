@@ -2,19 +2,19 @@
 
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { setRestaurantStatus } from '@/app/actions/admin';
+import { grantSubscriptionYear, setRestaurantStatus } from '@/app/actions/admin';
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input, Select } from '@/components/ui/field';
 import { Spinner, Table } from '@/components/ui/misc';
-import { money, pct } from '@/lib/format';
+import { fmtDate, money, pct } from '@/lib/format';
 import { day, run, useAdmin } from './shared';
 
 type Row = {
   id: number; name: string; cuisine: string; address: string; city: string; zip: string; phone: string; status: 'pending' | 'approved' | 'suspended';
   adminNote: string; taxRateBps: number; createdAt: string; ownerEmail: string; ownerUsername: string; activeOffers: number; orders: number;
-  foodCents: number; stripeReady: boolean; stripeAccount: string | null;
+  foodCents: number; stripeReady: boolean; stripeAccount: string | null; subscriptionPaidThrough: string | null; subscriptionActive: boolean;
 };
 
 export function RestaurantsPanel() {
@@ -27,6 +27,18 @@ export function RestaurantsPanel() {
     if (note === null) return;
     if (await run(() => setRestaurantStatus({ id: r.id, status: next, note }), `${r.name}: ${next}`)) queryClient.invalidateQueries({ queryKey: ['admin'] });
   };
+  const grant = async (r: Row) => {
+    const reason = prompt(`Give ${r.name} a free subscription year? It starts when their current year ends. Reason (saved in the audit log):`);
+    if (!reason) return;
+    if (await run(() => grantSubscriptionYear({ restaurantId: r.id, note: reason }), `${r.name}: free year added`)) queryClient.invalidateQueries({ queryKey: ['admin'] });
+  };
+  const subscription = (r: Row) => {
+    const until = r.subscriptionPaidThrough;
+    if (!until) return <Badge tone="amber">None</Badge>;
+    return r.subscriptionActive
+      ? <Badge tone="green">Until {fmtDate(until)}</Badge>
+      : <Badge tone="red">Ended {fmtDate(until)}</Badge>;
+  };
   return (
     <>
       <div className="mb-4 flex flex-wrap gap-3">
@@ -38,19 +50,21 @@ export function RestaurantsPanel() {
       <Card className="p-2">
         {isLoading ? <div className="grid place-items-center py-10"><Spinner /></div> : (
           <Table>
-            <thead><tr><th>Restaurant</th><th>Owner</th><th>Activity</th><th>Payouts</th><th>Status</th><th /></tr></thead>
+            <thead><tr><th>Restaurant</th><th>Owner</th><th>Activity</th><th>Subscription</th><th>Payouts</th><th>Status</th><th /></tr></thead>
             <tbody>
               {(data ?? []).map((r) => (
                 <tr key={r.id}>
                   <td><b>{r.name}</b><div className="text-xs text-muted">{r.cuisine} · {r.address}, {r.city} {r.zip} · tax {pct(r.taxRateBps)}</div>{r.adminNote && <div className="text-xs text-accent-ink">Note: {r.adminNote}</div>}</td>
                   <td className="text-sm">{r.ownerUsername}<div className="text-xs text-muted">{r.ownerEmail} · joined {day(r.createdAt)}</div></td>
                   <td className="text-sm">{r.activeOffers} live offers<div className="text-xs text-muted">{r.orders} orders · {money(r.foodCents)}</div></td>
+                  <td>{subscription(r)}</td>
                   <td>{r.stripeReady ? <Badge tone="green">Stripe ready</Badge> : <Badge tone="amber">Not connected</Badge>}</td>
                   <td><StatusBadge status={r.status} label={r.status === 'pending' ? 'Pending approval' : undefined} /></td>
                   <td className="whitespace-nowrap">
                     <div className="flex gap-1.5">
                       {r.status !== 'approved' && <Button size="sm" variant="green" onClick={() => change(r, 'approved')}>{r.status === 'pending' ? 'Approve' : 'Reinstate'}</Button>}
                       {r.status !== 'suspended' && <Button size="sm" variant="danger" onClick={() => change(r, 'suspended')}>Suspend</Button>}
+                      <Button size="sm" variant="ghost" onClick={() => grant(r)}>Free year</Button>
                     </div>
                   </td>
                 </tr>

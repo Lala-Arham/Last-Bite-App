@@ -7,6 +7,7 @@ import { publicEnv } from '@/lib/env';
 import { action, AppError, check, maybe, must } from '@/lib/errors';
 import { payments } from '@/lib/payments';
 import * as orders from '@/lib/orders';
+import * as subscriptions from '@/lib/subscriptions';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { supabaseServer } from '@/lib/supabase/server';
 import { menuItemSchema, parse, restaurantProfileSchema } from '@/lib/validate';
@@ -146,5 +147,27 @@ export async function stripeDashboardLink() {
     const url = await payments().dashboardLink(acct.stripe_account_id);
     if (!url) throw new AppError(409, payments().mode === 'mock' ? 'The Stripe dashboard is not available in test mode.' : 'Finish Stripe onboarding to open your dashboard.');
     return { url };
+  });
+}
+
+// ---------------------------------------------------------------- subscription
+
+// Pays one year of the partner subscription by card. token: a Stripe PaymentMethod id or, in mock mode, card details.
+export async function paySubscription(token: unknown) {
+  return action(async () => {
+    const { viewer, restaurant } = await requireRestaurant();
+    const res = await subscriptions.paySubscription(restaurant, viewer.id, token);
+    return res.requiresAction
+      ? { paymentId: res.paymentId, requiresAction: true as const, clientSecret: res.clientSecret }
+      : { paymentId: res.paymentId, requiresAction: false as const, clientSecret: null };
+  });
+}
+
+// After 3-D Secure.
+export async function confirmSubscriptionPayment(paymentId: number) {
+  return action(async () => {
+    const { restaurant } = await requireRestaurant();
+    const p = await subscriptions.confirmSubscriptionPayment(parse(z.number().int().positive(), paymentId), restaurant.id);
+    return { invoiceNumber: p.invoice_number };
   });
 }

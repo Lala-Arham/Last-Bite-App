@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/lib/database.types';
-import { LEGAL_VERSION } from '@/lib/legal/documents';
+import { DOCUMENTS, REQUIRED } from '@/lib/legal/documents';
 
 export type Db = SupabaseClient<Database>;
 
@@ -27,10 +27,7 @@ export const anon = () => createClient<Database>(url, anonKey, opts);
 export const uid = () => randomBytes(4).toString('hex');
 export const PASSWORD = 'testpass123';
 
-export const accepted = (role: 'customer' | 'restaurant') =>
-  role === 'customer'
-    ? { 'customer-terms': LEGAL_VERSION, privacy: LEGAL_VERSION }
-    : { 'restaurant-agreement': LEGAL_VERSION, privacy: LEGAL_VERSION };
+export const accepted = (role: 'customer' | 'restaurant') => Object.fromEntries(REQUIRED[role].map((d) => [d, DOCUMENTS[d].version]));
 
 // Signs up through Supabase Auth (the public API, like the website) and returns a signed-in client.
 export async function signUp(role: 'customer' | 'restaurant', extra: Record<string, unknown> = {}) {
@@ -52,7 +49,7 @@ export async function signUp(role: 'customer' | 'restaurant', extra: Record<stri
   return { client, id: data.user.id, username, email };
 }
 
-// A restaurant that is approved, connected to (mock) Stripe, with one menu item and one live offer.
+// A restaurant that is approved, subscribed, connected to (mock) Stripe, with one menu item and one live offer.
 export async function restaurantWithOffer({ quantity = 3, price = 1000, discount = 50, connected = true } = {}) {
   const owner = await signUp('restaurant');
   const db = admin();
@@ -63,6 +60,8 @@ export async function restaurantWithOffer({ quantity = 3, price = 1000, discount
       stripe_account_id: `acct_mock_${r.id}_${uid()}`, charges_enabled: true, payouts_enabled: true, bank_summary: 'TEST BANK ••••6789',
     }).eq('restaurant_id', r.id);
   }
+  const sub = await db.rpc('grant_subscription_year', { p_restaurant_id: r.id, p_note: 'test', p_by: null as unknown as string });
+  if (sub.error) throw new Error(sub.error.message);
   const item = (await owner.client.from('menu_items').insert({ restaurant_id: r.id, name: 'Test Bowl', price_cents: price }).select('*').single()).data!;
   const offer = await owner.client.rpc('restaurant_save_offer', {
     p_offer_id: null as unknown as number, p_menu_item_id: item.id, p_reason: 'end_of_day', p_description: '',
