@@ -7,6 +7,9 @@ import { publicEnv } from '@/lib/env';
 import { action, AppError, check, maybe, must } from '@/lib/errors';
 import { payments } from '@/lib/payments';
 import * as orders from '@/lib/orders';
+import * as subscriptions from '@/lib/subscriptions';
+import { kioskToken, resetKioskToken } from '@/lib/kiosk';
+import { sendWelcomeEmail } from '@/lib/onboarding';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { supabaseServer } from '@/lib/supabase/server';
 import { menuItemSchema, parse, restaurantProfileSchema } from '@/lib/validate';
@@ -146,5 +149,55 @@ export async function stripeDashboardLink() {
     const url = await payments().dashboardLink(acct.stripe_account_id);
     if (!url) throw new AppError(409, payments().mode === 'mock' ? 'The Stripe dashboard is not available in test mode.' : 'Finish Stripe onboarding to open your dashboard.');
     return { url };
+  });
+}
+
+// ---------------------------------------------------------------- subscription
+
+// Pays one year of the partner subscription by card. token: a Stripe PaymentMethod id or, in mock mode, card details.
+export async function paySubscription(token: unknown) {
+  return action(async () => {
+    const { viewer, restaurant } = await requireRestaurant();
+    const res = await subscriptions.paySubscription(restaurant, viewer.id, token);
+    return res.requiresAction
+      ? { paymentId: res.paymentId, requiresAction: true as const, clientSecret: res.clientSecret }
+      : { paymentId: res.paymentId, requiresAction: false as const, clientSecret: null };
+  });
+}
+
+// After 3-D Secure.
+export async function confirmSubscriptionPayment(paymentId: number) {
+  return action(async () => {
+    const { restaurant } = await requireRestaurant();
+    const p = await subscriptions.confirmSubscriptionPayment(parse(z.number().int().positive(), paymentId), restaurant.id);
+    return { invoiceNumber: p.invoice_number };
+  });
+}
+
+// ---------------------------------------------------------------- kiosk
+
+// The restaurant's kiosk link (created the first time).
+export async function getKioskLink() {
+  return action(async () => {
+    const { restaurant } = await requireRestaurant();
+    return { token: await kioskToken(restaurant.id) };
+  });
+}
+
+// A new kiosk link: tablets using the old one stop working until they open the new one.
+export async function resetKioskLink() {
+  return action(async () => {
+    const { restaurant } = await requireRestaurant();
+    return { token: await resetKioskToken(restaurant.id) };
+  });
+}
+
+// Emails the owner the welcome pack again: kiosk link, install buttons and signed agreement.
+export async function emailKioskLink() {
+  return action(async () => {
+    const { restaurant } = await requireRestaurant();
+    if (restaurant.status !== 'approved') throw new AppError(409, 'The kiosk email is sent once Last Bite approves your restaurant.');
+    if (!(await sendWelcomeEmail(restaurant.id, { again: true }))) throw new AppError(502, 'We could not send the email right now. Please try again later.');
+    return null;
   });
 }

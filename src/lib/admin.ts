@@ -122,13 +122,16 @@ export async function overview(params: URLSearchParams) {
 export async function restaurants(params: URLSearchParams) {
   const status = params.get('status') ?? '';
   const q = (params.get('q') ?? '').trim().toLowerCase();
-  const [rows, owners, offers, sold, accounts] = await Promise.all([
+  const [rows, owners, offers, sold, accounts, subs] = await Promise.all([
     all<Database['public']['Tables']['restaurants']['Row']>((a, b) => db().from('restaurants').select('*').order('created_at', { ascending: false }).range(a, b)),
     all<{ id: string; email: string; username: string; status: string }>((a, b) => db().from('profiles').select('id, email, username, status').eq('role', 'restaurant').range(a, b)),
     all<{ restaurant_id: number }>((a, b) => db().from('offers').select('restaurant_id').eq('status', 'active').gt('pickup_end', new Date().toISOString()).range(a, b)),
     all<{ restaurant_id: number; subtotal_cents: number }>((a, b) => db().from('orders').select('restaurant_id, subtotal_cents').eq('status', 'picked_up').range(a, b)),
     all<{ restaurant_id: number; charges_enabled: boolean; stripe_account_id: string | null }>((a, b) => db().from('restaurant_payment_accounts').select('restaurant_id, charges_enabled, stripe_account_id').range(a, b)),
+    all<{ restaurant_id: number; period_end: string | null }>((a, b) => db().from('subscription_payments').select('restaurant_id, period_end').eq('status', 'paid').range(a, b)),
   ]);
+  const paidThrough = new Map<number, string>();
+  for (const x of subs) if (x.period_end && x.period_end > (paidThrough.get(x.restaurant_id) ?? '')) paidThrough.set(x.restaurant_id, x.period_end);
   const owner = new Map(owners.map((o) => [o.id, o]));
   const acct = new Map(accounts.map((a) => [a.restaurant_id, a]));
   const count = <T extends { restaurant_id: number }>(list: T[], id: number, f: (x: T) => number = () => 1) =>
@@ -141,6 +144,8 @@ export async function restaurants(params: URLSearchParams) {
       ownerEmail: owner.get(r.owner_id)?.email ?? '', ownerUsername: owner.get(r.owner_id)?.username ?? '',
       activeOffers: count(offers, r.id), orders: count(sold, r.id), foodCents: count(sold, r.id, (x) => x.subtotal_cents),
       stripeReady: !!acct.get(r.id)?.charges_enabled, stripeAccount: acct.get(r.id)?.stripe_account_id ?? null,
+      subscriptionPaidThrough: paidThrough.get(r.id) ?? null,
+      subscriptionActive: Date.parse(paidThrough.get(r.id) ?? '') > Date.now(),
     }))
     .filter((r) => (!status || r.status === status) && (!q || [r.name, r.city, r.zip, r.ownerEmail].join(' ').toLowerCase().includes(q)))
     .sort((a, b) => rank[a.status] - rank[b.status]);
@@ -322,6 +327,8 @@ export async function settings() {
     serviceFeePct: Number(get('service_fee_bps') ?? 500) / 100,
     defaultTaxRatePct: Number(get('default_tax_rate_bps') ?? 1035) / 100,
     requireRestaurantApproval: get('require_restaurant_approval') !== false,
+    subscriptionFee: Number(get('subscription_fee_cents') ?? 10000) / 100,
+    requireSubscription: get('require_subscription') === true,
   };
 }
 

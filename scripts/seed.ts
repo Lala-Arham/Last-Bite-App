@@ -4,7 +4,7 @@
 import { config } from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../src/lib/database.types';
-import { LEGAL_VERSION, REQUIRED } from '../src/lib/legal/documents';
+import { DOCUMENTS, REQUIRED } from '../src/lib/legal/documents';
 import { quote } from '../src/lib/pricing';
 
 config({ path: '.env.local' });
@@ -120,7 +120,7 @@ async function user(username: string, role: 'customer' | 'restaurant' | 'admin',
   }
   // Admins are created as customers and then promoted (like scripts/create-admin.ts does).
   const signupRole = role === 'admin' ? 'customer' : role;
-  const accepted = Object.fromEntries(REQUIRED[signupRole].map((d) => [d, LEGAL_VERSION]));
+  const accepted = Object.fromEntries(REQUIRED[signupRole].map((d) => [d, DOCUMENTS[d].version]));
   const email = `${username}@lastbite.test`;
   const create = () => db.auth.admin.createUser({
     email,
@@ -183,6 +183,15 @@ Create them first with: npx supabase db push   (see "Run it locally" in README.m
       status: u === PENDING_USER ? 'pending' : 'approved',
       description: `${cuisine} in ${city}.`, phone: `(709) 555-${String(1000 + i).slice(-4)}`,
     }).eq('id', ids[u]).select('id'), 'approve');
+  }
+
+  // Approved restaurants have paid this year's partner subscription (mock card payments).
+  for (const [u, id] of Object.entries(ids)) {
+    if (u === PENDING_USER) continue;
+    const paid = must(await db.from('subscription_payments').select('id').eq('restaurant_id', id).eq('status', 'paid').limit(1), 'subscription');
+    if (paid.length) continue;
+    const p = must(await db.rpc('begin_subscription_payment', { p_restaurant_id: id }), 'subscription');
+    must(await db.rpc('finish_subscription_payment', { p_id: p.id, p_payment_ref: `pi_mock_seed_${id}`, p_card_label: 'VISA •••• 4242' }), 'subscription');
   }
 
   // Menus.
@@ -264,6 +273,7 @@ Create them first with: npx supabase db push   (see "Run it locally" in README.m
   console.log(`  Owner/admin login: admin / ${DEMO_PASSWORD}  (demo only: create your real one with npm run create-admin)`);
   console.log(`  Restaurant logins (password ${DEMO_PASSWORD}):`);
   console.log(`    Downtown St. John's (Stripe connected): ${RESTAURANTS.map((r) => r.user).join(', ')}`);
+  console.log(`    Approved restaurants have a paid partner subscription; ${PENDING_USER} has none yet.`);
   console.log(`    Awaiting approval: ${REGIONAL.map((r) => `${r[0]} (${r[4]})`).join(', ')}`);
 }
 

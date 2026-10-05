@@ -3,13 +3,16 @@ import { serverEnv } from '@/lib/env';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { renderDocument, type Company } from './documents';
 
-// Company details and live settings (service fee) used in the legal documents.
+// Company details and live settings (service fee, subscription price) used in the legal documents.
 export async function company(): Promise<Company> {
-  const { data } = await supabaseAdmin().from('settings').select('value').eq('key', 'service_fee_bps').maybeSingle();
+  const { data } = await supabaseAdmin().from('settings').select('key, value').in('key', ['service_fee_bps', 'subscription_fee_cents', 'default_tax_rate_bps']);
+  const get = (k: string, d: number) => Number(data?.find((r) => r.key === k)?.value ?? d);
   return {
     ...serverEnv.legal,
-    serviceFeePct: Number(data?.value ?? 500) / 100,
+    serviceFeePct: get('service_fee_bps', 500) / 100,
     graceMinutes: serverEnv.pickupGraceMinutes,
+    subscriptionFeeCents: get('subscription_fee_cents', 10000),
+    subscriptionTaxPct: get('default_tax_rate_bps', 1500) / 100,
   };
 }
 

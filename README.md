@@ -53,6 +53,16 @@ Last Bite is a marketplace where restaurants in St. John's, Newfoundland and Lab
 | **Refund to original payment** | money back to their card (credit part back to their balance) | gives up its share (the transfer is partially reversed) | gives up its fee share |
 | **Refund as platform credit** | credit for future orders | keeps its full payment | pays for the credit |
 
+### Restaurant subscription
+
+Restaurants pay an annual **partner subscription** ($100 plus 15% HST = $115 by default) in the Partner Portal's **Subscription** tab. There is no commission on food sales. How it works:
+
+- **One year per payment, no auto-renewal.** The card is charged once, on Last Bite's own Stripe account (not Connect). Renewing early (allowed from 60 days before the end) adds the new year after the current one.
+- **Needed to post offers.** Without an active subscription a restaurant can't post or resume offers. Offers already live run until their timers end, and pickups and payouts keep working. The dashboard shows a banner when there is no subscription, and a reminder 30 days before it ends.
+- **Invoices.** Each paid year gets an invoice number (`SUB-YYYYMMDD-000001`) and a PDF invoice showing the HST. Set `HST_REGISTRATION_NUMBER` to print Last Bite's GST/HST number on it.
+- **Admin controls.** In the owner console, **Restaurants** shows each subscription and has a **Free year** button (recorded in the audit log). **Settings** changes the yearly fee or turns the requirement off.
+- **Refunds** (for example when a restaurant isn't approved; see section 5.3 of the Partner Agreement) are made in the Stripe Dashboard.
+
 With Stripe Connect, card holds are **destination charges** (`transfer_data.destination`) when the restaurant's Stripe account is ready. At capture Last Bite sets an **application fee** (service fee + tax), so Stripe moves the food subtotal to the restaurant. Restaurants that haven't connected Stripe yet are charged on the platform and paid later from the owner console.
 
 ## Project layout
@@ -182,7 +192,7 @@ To keep the app running in the background on Windows instead, use WSL 2 with sys
 ## Deploy
 
 1. **Supabase:** create a project, then `npx supabase link --project-ref <ref>` and `npx supabase db push` to apply the migrations. In Auth settings, set the Site URL, add `https://<your-site>/auth/confirm` as a redirect URL, and turn on **Confirm email**. Enable the `pg_cron` extension (Database → Extensions) before pushing, or schedule `/api/cron/sweep` instead.
-2. **Stripe:** turn on Connect (Express accounts). Add a webhook endpoint `https://<your-site>/api/stripe/webhook` for `account.updated` (connected accounts), `payment_intent.amount_capturable_updated` and `payment_intent.payment_failed`.
+2. **Stripe:** turn on Connect (Express accounts). Add a webhook endpoint `https://<your-site>/api/stripe/webhook` for `account.updated` (connected accounts), `payment_intent.amount_capturable_updated`, `payment_intent.succeeded` (subscription payments) and `payment_intent.payment_failed`.
 3. **Vercel (or any Node host):** set the variables from `.env.example` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `NEXT_PUBLIC_SITE_URL`, Stripe keys, `STRIPE_WEBHOOK_SECRET`, `CRON_SECRET`, company details). `vercel.json` calls `/api/cron/sweep` every 5 minutes, which voids card holds of released orders.
 4. Create your owner account with `npm run create-admin` (pointing `.env.local` at the production project).
 
@@ -196,6 +206,46 @@ For a project on supabase.com, install it with `npm run email:template`. It uplo
 
 Keep **Authentication → URL Configuration → Site URL** set to your site's address: the button links to `<Site URL>/auth/confirm`. After signing up, people see a "Check your email" page with **Resend confirmation email** (once a minute) and **Back to login**; trying to log in before confirming offers the resend button too.
 
+### Restaurant onboarding emails
+
+Restaurants get three emails:
+
+1. **Confirm your email** at sign-up. Supabase Auth sends it (`supabase/templates/confirmation.html`). Turn on **Confirm email** in your Supabase project (Authentication → Providers → Email).
+2. **Application pending.** The app sends this after the owner clicks the confirmation link (`/auth/confirm`). If email confirmation is off, it goes out at sign-up instead.
+3. **Welcome**, when you approve the restaurant in the owner console. It includes:
+   - the **electronically signed Restaurant Partner Agreement** as a PDF;
+   - the restaurant's **kiosk link**;
+   - **Download for Android tablet** and **Download for iPad** buttons.
+
+   If approval isn't required, it goes out once the owner's email is verified.
+
+Each automatic email is sent once (`restaurant_emails`). The owner can resend the welcome pack from the Partner Portal (**Kiosk** tab).
+
+The app's own emails need SMTP. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `EMAIL_FROM`; any provider works, such as Resend, Postmark, SendGrid or Amazon SES. Locally they land in the Supabase inbox at http://127.0.0.1:54324.
+
+The signed agreement PDF (`/api/restaurant/agreement`) contains:
+- the agreement text;
+- the owner's acceptance record: time, version, IP address and device, captured when they ticked "I agree" at sign-up;
+- Last Bite's countersignature (the first approval time);
+- a SHA-256 fingerprint of the text.
+
+### Restaurant kiosk
+
+Each restaurant has a secret kiosk link, `/kiosk/<token>`, for the tablet at its counter. It's a full-screen screen for staff:
+- a big PIN pad to hand over orders (the card is charged at that moment, as in the Partner Portal);
+- a bell and banner for every new order, checked every 5 seconds;
+- the orders waiting for pickup and today's totals;
+- **Post surplus food** in a few taps (needs an active subscription).
+
+It keeps the screen awake. It doesn't use a login and can't see payouts or settings. The token (192 random bits) is the key, and owners can reset it in the **Kiosk** tab. A reset logs out every tablet using the old link.
+
+Putting it on a tablet's home screen (`/kiosk/<token>/install`, linked from the welcome email and the Kiosk tab):
+
+- **Android (Chrome):** the kiosk is an installable web app (per-restaurant manifest and a service worker), so **Install** puts the restaurant's icon on the home screen. The tablet still asks the owner to confirm with one tap; no website can add an icon silently.
+- **iPad (Safari):** **Download** gives a small configuration profile (`.mobileconfig`) containing a full-screen Web Clip. After **Settings → Profile Downloaded → Install**, the icon is on the home screen. Safari's **Share → Add to Home Screen** works too.
+  - The profile is unsigned, so iPadOS labels it "Not Signed". Sign it with an Apple-trusted certificate to remove that label.
+- Opened on another device (such as the owner's computer), the install page shows a QR code to scan with the tablet.
+
 ### Password reset
 
 **Forgot password?** on the log-in page opens `/forgot-password`: the user enters their registered email, receives a **6-digit verification code** (`supabase/templates/recovery.html`, Supabase's "Reset password" email), types it in, then chooses a new password (same rules as sign-up). The page gives the same answer whether or not the email has an account, so it can't be used to find out who is registered. Codes work once and expire after an hour (`otp_expiry`); after 5 wrong codes for an address, it has to wait 15 minutes. Only a browser that just verified a code can set the new password (a short-lived cookie), and saving it signs the account out everywhere else. `npm run email:template` installs this email too; locally, read the codes at [127.0.0.1:54324](http://127.0.0.1:54324) (Mailpit).
@@ -204,7 +254,7 @@ Keep **Authentication → URL Configuration → Site URL** set to your site's ad
 
 ## Legal documents
 
-Customer Terms, Restaurant Partner Agreement and Privacy Policy live in `src/lib/legal/documents.ts` (version `2026-10-01.1`, written for Newfoundland and Labrador and Canada) and are shown at `/legal/...`. When you change the text, bump `LEGAL_VERSION` and add a migration updating `legal_documents`; a test checks they match. Signed-in users are then asked to accept the new version (declining signs them out). Have a lawyer licensed in Newfoundland and Labrador review them before launch.
+Customer Terms, Restaurant Partner Agreement and Privacy Policy live in `src/lib/legal/documents.ts` (written for Newfoundland and Labrador and Canada) and are shown at `/legal/...`. Each document has its own version in `DOCUMENTS` (the Partner Agreement is `2026-10-04.1`, which added the subscription; the others are `2026-10-01.1`). When you change a document's text, bump its version there and add a migration updating `legal_documents`; a test checks they match. Signed-in users are then asked to accept the new version (declining signs them out). Have a lawyer licensed in Newfoundland and Labrador review them before launch.
 
 ## Upgrading from the first version
 

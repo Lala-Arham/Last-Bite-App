@@ -2,12 +2,13 @@ import { NextResponse, type NextRequest } from 'next/server';
 import type Stripe from 'stripe';
 import { serverEnv } from '@/lib/env';
 import * as orders from '@/lib/orders';
+import * as subscriptions from '@/lib/subscriptions';
 import { constructWebhookEvent } from '@/lib/payments/stripe';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 
 // Stripe webhook (Dashboard → Developers → Webhooks → endpoint https://<site>/api/stripe/webhook).
 // Listen to "Connected accounts" events: account.updated; and "Your account" events:
-// payment_intent.amount_capturable_updated, payment_intent.payment_failed.
+// payment_intent.amount_capturable_updated, payment_intent.succeeded, payment_intent.payment_failed.
 export async function POST(req: NextRequest) {
   if (!serverEnv.stripeSecretKey || !serverEnv.stripeWebhookSecret) {
     return NextResponse.json({ error: 'Stripe webhooks are not configured.' }, { status: 501 });
@@ -33,9 +34,17 @@ export async function POST(req: NextRequest) {
       if (orderId) await db.rpc('mark_order_reserved', { p_order_id: orderId });
       break;
     }
+    // Subscription payment completed after 3-D Secure (in case the browser never came back).
+    case 'payment_intent.succeeded': {
+      const paymentId = Number(event.data.object.metadata?.subscription_payment_id);
+      if (paymentId) await subscriptions.confirmSubscriptionPayment(paymentId);
+      break;
+    }
     case 'payment_intent.payment_failed': {
       const orderId = Number(event.data.object.metadata?.order_id);
       if (orderId) await orders.release(orderId, 'pending_payment', 'failed', true);
+      const paymentId = Number(event.data.object.metadata?.subscription_payment_id);
+      if (paymentId) await subscriptions.markSubscriptionPaymentFailed(paymentId);
       break;
     }
   }

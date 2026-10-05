@@ -86,6 +86,36 @@ export function createStripeProvider(secretKey: string, api?: { host: string; po
       return 'failed';
     },
 
+    async charge({ amountCents, customerId, paymentRef, description, metadata, idempotencyKey }) {
+      return wrap(async () => {
+        const intent = await stripe.paymentIntents.create(
+          {
+            amount: amountCents,
+            currency: 'cad',
+            allowed_payment_method_types: ['card'],
+            customer: customerId ?? undefined,
+            payment_method: paymentRef,
+            confirm: true,
+            description,
+            metadata,
+          },
+          { idempotencyKey },
+        );
+        if (intent.status === 'succeeded') return { ref: intent.id, status: 'succeeded' as const };
+        if (intent.status === 'requires_action') {
+          return { ref: intent.id, status: 'requires_action' as const, clientSecret: intent.client_secret ?? undefined };
+        }
+        throw new PaymentError('Your card could not be charged.');
+      });
+    },
+
+    async chargeStatus(ref) {
+      const intent = await stripe.paymentIntents.retrieve(ref);
+      if (intent.status === 'succeeded') return 'succeeded';
+      if (intent.status === 'requires_action' || intent.status === 'processing') return 'requires_action';
+      return 'failed';
+    },
+
     async capture(ref, { applicationFeeCents, idempotencyKey }) {
       const intent = await wrap(() =>
         stripe.paymentIntents.capture(

@@ -11,6 +11,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { supabaseServer } from '@/lib/supabase/server';
 import { emailSchema, parse, passwordSchema, signupSchema } from '@/lib/validate';
 import { z } from 'zod';
+import { onEmailVerified } from '@/lib/onboarding';
 
 async function requestInfo() {
   const h = await headers();
@@ -76,7 +77,9 @@ export async function signUp(input: unknown) {
       if (/already registered|already exists/i.test(error.message)) throw new AppError(409, 'An account with this email already exists.');
       throw new AppError(400, error.message.includes('Database error') ? 'We could not create your account. Please check your details.' : error.message);
     }
-    // With email confirmation on (recommended in production) there is no session until the link is clicked.
+    // With email confirmation on (recommended in production) there is no session until the link is clicked;
+    // the restaurant onboarding emails then start from /auth/confirm.
+    if (res.session && res.user && data.role === 'restaurant') await onEmailVerified(res.user.id);
     return { needsConfirmation: !res.session, next: homeFor(data.role) };
   });
 }

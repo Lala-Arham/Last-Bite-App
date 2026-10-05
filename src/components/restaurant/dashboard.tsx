@@ -4,16 +4,17 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Banknote, Bell, BellOff, ClipboardList, FileText, KeyRound, Plus, Store, Tag, UtensilsCrossed } from 'lucide-react';
+import { BadgeCheck, Banknote, MonitorSmartphone, Bell, BellOff, ClipboardList, FileText, KeyRound, Plus, Store, Tag, UtensilsCrossed } from 'lucide-react';
 import { DemoVideoButton } from '@/components/app/demo-video';
 import type { MapConfig } from '@/components/offers/types';
 import { Alert } from '@/components/ui/alert';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Kpi } from '@/components/ui/misc';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { fmtTime, money, pct } from '@/lib/format';
+import { fmtDate, fmtTime, money, pct } from '@/lib/format';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { isUnlocked, ringBell, unlockOnInteraction } from './bell';
+import { KioskPanel } from './kiosk-panel';
 import { MenuPanel } from './menu-panel';
 import { OfferFormDialog } from './offer-form-dialog';
 import { OffersPanel } from './offers-panel';
@@ -21,15 +22,17 @@ import { OrdersPanel } from './orders-panel';
 import { PayoutsPanel } from './payouts-panel';
 import { PickupPanel } from './pickup-panel';
 import { ProfilePanel } from './profile-panel';
+import { SubscriptionPanel, useSubscription } from './subscription-panel';
 import type { Ctx, Restaurant } from './types';
 
 type NewOrder = { id: number; quantity: number; item_title: string; customer_username: string; total_cents: number; pickup_end: string; image_url: string | null };
 
-export function RestaurantDashboard({ restaurant, serviceFeeBps, map, paymentMode, initialTab, stripeReturn }: {
+export function RestaurantDashboard({ restaurant, serviceFeeBps, map, paymentMode, stripePublishableKey, initialTab, stripeReturn }: {
   restaurant: Restaurant;
   serviceFeeBps: number;
   map: MapConfig;
   paymentMode: 'stripe' | 'mock';
+  stripePublishableKey: string;
   initialTab: string;
   stripeReturn: boolean;
 }) {
@@ -42,7 +45,8 @@ export function RestaurantDashboard({ restaurant, serviceFeeBps, map, paymentMod
   const [soundOn, setSoundOn] = useState(true);
   const [unlocked, setUnlocked] = useState(false);
   const seen = useRef(new Set<number>());
-  const ctx: Ctx = { restaurant, serviceFeeBps, map, paymentMode };
+  const ctx: Ctx = { restaurant, serviceFeeBps, map, paymentMode, stripePublishableKey };
+  const subscription = useSubscription();
 
   const stats = useQuery({
     queryKey: ['restaurant-stats'],
@@ -127,14 +131,29 @@ export function RestaurantDashboard({ restaurant, serviceFeeBps, map, paymentMod
     <main className="container-page py-8">
       {restaurant.status === 'pending' && (
         <Alert tone="warn" className="mb-5">
-          ⏳ <b>Your restaurant is waiting for approval.</b> You can set up your menu and offers now; customers will see them once Last Bite approves
-          your account (usually within 1 business day).
+          ⏳ <b>Your restaurant is waiting for approval.</b> You can set up your menu, subscription and offers now; customers will see your offers
+          once Last Bite approves your account (usually within 1 business day). If we can&apos;t approve it, we refund your subscription in full.
         </Alert>
       )}
       {restaurant.status === 'suspended' && (
         <Alert tone="error" className="mb-5">
           ⛔ <b>Your restaurant is suspended.</b> Your offers are hidden and you can&apos;t post new ones. You can still verify pickups for existing
           orders. Contact Last Bite support.{restaurant.admin_note && <> Note: {restaurant.admin_note}</>}
+        </Alert>
+      )}
+      {subscription.data?.required && !subscription.data.active && restaurant.status !== 'suspended' && (
+        <Alert tone="warn" className="mb-5 flex flex-wrap items-center gap-3">
+          <span className="flex-1">
+            ⭐ <b>{subscription.data.paidThrough ? `Your Last Bite subscription ended on ${fmtDate(subscription.data.paidThrough)}.` : 'Activate your Last Bite subscription.'}</b>{' '}
+            You need an active subscription ({money(subscription.data.feeCents)} a year plus HST) to post surplus food.
+          </span>
+          <Button size="sm" onClick={() => changeTab('subscription')}>{subscription.data.paidThrough ? 'Renew now' : 'Subscribe'}</Button>
+        </Alert>
+      )}
+      {subscription.data?.endsSoon && subscription.data.paidThrough && (
+        <Alert tone="info" className="mb-5 flex flex-wrap items-center gap-3">
+          <span className="flex-1">⭐ Your Last Bite subscription ends on <b>{fmtDate(subscription.data.paidThrough)}</b>. Renew to keep posting offers.</span>
+          <Button size="sm" variant="ghost" onClick={() => changeTab('subscription')}>Renew</Button>
         </Alert>
       )}
       <div className="mb-5 flex flex-wrap items-center gap-3">
@@ -168,6 +187,8 @@ export function RestaurantDashboard({ restaurant, serviceFeeBps, map, paymentMod
           <TabsTrigger value="menu"><UtensilsCrossed /> Menu</TabsTrigger>
           <TabsTrigger value="orders"><ClipboardList /> Orders</TabsTrigger>
           <TabsTrigger value="payouts"><Banknote /> Payouts</TabsTrigger>
+          <TabsTrigger value="subscription"><BadgeCheck /> Subscription</TabsTrigger>
+          <TabsTrigger value="kiosk"><MonitorSmartphone /> Kiosk</TabsTrigger>
           <TabsTrigger value="profile"><Store /> Profile</TabsTrigger>
         </TabsList>
         <TabsContent value="pickup"><PickupPanel /></TabsContent>
@@ -175,6 +196,8 @@ export function RestaurantDashboard({ restaurant, serviceFeeBps, map, paymentMod
         <TabsContent value="menu"><MenuPanel onDiscount={(menuItemId) => setOfferForm({ open: true, menuItemId })} /></TabsContent>
         <TabsContent value="orders"><OrdersPanel restaurantId={restaurant.id} /></TabsContent>
         <TabsContent value="payouts"><PayoutsPanel ctx={ctx} stripeReturn={stripeReturn} /></TabsContent>
+        <TabsContent value="subscription"><SubscriptionPanel ctx={ctx} /></TabsContent>
+        <TabsContent value="kiosk"><KioskPanel ctx={ctx} /></TabsContent>
         <TabsContent value="profile"><ProfilePanel ctx={ctx} /></TabsContent>
       </Tabs>
 

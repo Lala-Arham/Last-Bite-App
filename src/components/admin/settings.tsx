@@ -10,7 +10,10 @@ import { Checkbox, Field, Input } from '@/components/ui/field';
 import { Spinner } from '@/components/ui/misc';
 import { run, useAdmin } from './shared';
 
-type S = { settings: { serviceFeePct: number; defaultTaxRatePct: number; requireRestaurantApproval: boolean }; paymentMode: 'stripe' | 'mock' };
+type S = {
+  settings: { serviceFeePct: number; defaultTaxRatePct: number; requireRestaurantApproval: boolean; subscriptionFee: number; requireSubscription: boolean };
+  paymentMode: 'stripe' | 'mock';
+};
 
 export function SettingsPanel() {
   const queryClient = useQueryClient();
@@ -24,6 +27,8 @@ function SettingsForm({ data, onSaved }: { data: S; onSaved: () => void }) {
     serviceFeePct: String(data.settings.serviceFeePct),
     defaultTaxRatePct: String(data.settings.defaultTaxRatePct),
     requireRestaurantApproval: data.settings.requireRestaurantApproval,
+    subscriptionFee: String(data.settings.subscriptionFee),
+    requireSubscription: data.settings.requireSubscription,
   });
   return (
     <div className="grid max-w-2xl gap-5">
@@ -31,6 +36,8 @@ function SettingsForm({ data, onSaved }: { data: S; onSaved: () => void }) {
         <CardTitle>Business settings</CardTitle>
         <Field label="Customer service fee (%)" htmlFor="s-fee" hint="Added to every new order. Existing orders keep the fee they were quoted. Shown in the Customer Terms."><Input id="s-fee" inputMode="decimal" className="max-w-40" value={f.serviceFeePct} onChange={(e) => setF({ ...f, serviceFeePct: e.target.value })} /></Field>
         <Field label="Default HST rate for new restaurants (%)" htmlFor="s-tax" hint="Restaurants can set their own rate in their profile."><Input id="s-tax" inputMode="decimal" className="max-w-40" value={f.defaultTaxRatePct} onChange={(e) => setF({ ...f, defaultTaxRatePct: e.target.value })} /></Field>
+        <Field label="Restaurant subscription fee per year ($, before HST)" htmlFor="s-sub" hint="Charged when a restaurant pays or renews. Years already paid are not affected. Shown in the Partner Agreement."><Input id="s-sub" inputMode="decimal" className="max-w-40" value={f.subscriptionFee} onChange={(e) => setF({ ...f, subscriptionFee: e.target.value })} /></Field>
+        <Checkbox className="mb-3" checked={f.requireSubscription} onChange={(e) => setF({ ...f, requireSubscription: e.target.checked })} label="Restaurants need an active subscription to post offers" />
         <Checkbox className="mb-5" checked={f.requireRestaurantApproval} onChange={(e) => setF({ ...f, requireRestaurantApproval: e.target.checked })} label="New restaurants need my approval before their offers are visible" />
         <Button onClick={async () => { if (await run(() => updateSettings(f), 'Settings saved')) onSaved(); }}>Save settings</Button>
       </Card>

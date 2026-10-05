@@ -18,6 +18,8 @@ export type CardInfo = { ref: string; brand: string; last4: string; expMonth: nu
 
 export type AuthorizeResult = { ref: string; status: 'authorized' | 'requires_action'; clientSecret?: string };
 
+export type ChargeResult = { ref: string; status: 'succeeded' | 'requires_action'; clientSecret?: string };
+
 export type ConnectStatus = {
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
@@ -50,6 +52,17 @@ export interface PaymentProvider {
   capture(ref: string, p: { applicationFeeCents: number | null; idempotencyKey: string }): Promise<{ chargeId: string | null; transferId: string | null }>;
   refund(ref: string, amountCents: number, idempotencyKey: string): Promise<{ id: string }>;
   void(ref: string): Promise<void>;
+
+  // One-off card payment charged immediately (restaurant subscriptions), on the platform account.
+  charge(p: {
+    amountCents: number;
+    customerId: string | null;
+    paymentRef: string;
+    description: string;
+    metadata: Record<string, string>;
+    idempotencyKey: string;
+  }): Promise<ChargeResult>;
+  chargeStatus(ref: string): Promise<'succeeded' | 'requires_action' | 'failed'>;
 
   // Stripe Connect
   createConnectedAccount(p: { email: string; businessName: string; restaurantId: number }): Promise<string>;
