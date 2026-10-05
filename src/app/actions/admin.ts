@@ -1,11 +1,14 @@
 'use server';
 
 import { z } from 'zod';
+import { deleteAccount } from '@/lib/accounts';
 import { log } from '@/lib/admin';
 import { requireActor } from '@/lib/auth';
 import { action, AppError, check, must } from '@/lib/errors';
 import { money } from '@/lib/format';
 import * as orders from '@/lib/orders';
+import { onApproved } from '@/lib/onboarding';
+import * as subscriptions from '@/lib/subscriptions';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { SUSPENSION_DAYS } from '@/lib/constants';
 import { dollars, int, parse } from '@/lib/validate';
@@ -20,7 +23,9 @@ export async function setRestaurantStatus(input: unknown) {
     const d = parse(z.object({ id: z.number().int(), status: z.enum(['approved', 'suspended', 'pending']), note: note('Note').default('') }), input);
     const r = must(await db().from('restaurants').update({ status: d.status, admin_note: d.note }).eq('id', d.id).select('id, name').maybeSingle());
     await log(me.id, `restaurant.${d.status}`, 'restaurant', r.id, `${r.name}${d.note ? `: ${d.note}` : ''}`);
-    return null;
+    // First approval: Last Bite countersigns the Partner Agreement and the welcome email goes out (once).
+    const welcomed = d.status === 'approved' ? await onApproved(r.id) : false;
+    return { welcomed };
   });
 }
 
@@ -44,38 +49,15 @@ export async function setUserStatus(input: unknown) {
   });
 }
 
-// Deletes an account. One with no orders, payments or credit is removed completely. One with history
-// can't be removed without losing sales and tax records, so it is closed for good instead: login is
-// blocked, and the name, email and saved cards are erased (past orders say "Deleted user").
+// Deletes an account (see deleteAccount in src/lib/accounts.ts).
 export async function deleteUser(input: unknown) {
   return action(async () => {
     const me = await requireActor('admin');
     const d = parse(z.object({ id: z.string().uuid() }), input);
     if (d.id === me.id) throw new AppError(400, 'You cannot delete your own account.');
-    const u = must(await db().from('profiles').select('username, role').eq('id', d.id).neq('status', 'deleted').maybeSingle());
-
-    const removed = await db().auth.admin.deleteUser(d.id);
-    if (!removed.error) {
-      await log(me.id, 'user.delete', 'user', d.id, `${u.username} (${u.role}): removed completely`);
-      return { anonymized: false };
-    }
-
-    // Kept for its records: anonymize.
-    const tag = `deleted_${d.id.slice(0, 8)}`;
-    const closed = await db().auth.admin.updateUserById(d.id, {
-      email: `${tag}@deleted.invalid`, email_confirm: true, password: crypto.randomUUID() + crypto.randomUUID(),
-      user_metadata: {}, ban_duration: '876000h',
-    });
-    if (closed.error) throw new AppError(500, closed.error.message);
-    must(await db().from('profiles').update({ username: tag, email: `${tag}@deleted.invalid`, status: 'deleted', suspended_until: null, stripe_customer_id: null }).eq('id', d.id).select('id'));
-    must(await db().from('payment_methods').delete().eq('user_id', d.id).select('id'));
-    must(await db().from('orders').update({ customer_username: 'Deleted user' }).eq('user_id', d.id).select('id'));
-    if (u.role === 'restaurant') {
-      const r = must(await db().from('restaurants').update({ status: 'suspended', admin_note: 'Owner account deleted' }).eq('owner_id', d.id).select('id'));
-      for (const { id } of r) must(await db().from('offers').update({ status: 'ended' }).eq('restaurant_id', id).neq('status', 'ended').select('id'));
-    }
-    await log(me.id, 'user.delete', 'user', d.id, `${u.username} (${u.role}): personal details erased, order history kept`);
-    return { anonymized: true };
+    const res = await deleteAccount(d.id);
+    await log(me.id, 'user.delete', 'user', d.id, `${res.username} (${res.role}): ${res.anonymized ? 'personal details erased, order history kept' : 'removed completely'}`);
+    return { anonymized: res.anonymized };
   });
 }
 
@@ -154,6 +136,18 @@ export async function payRestaurant(input: unknown) {
   });
 }
 
+// A complimentary subscription year (no charge), added after any year already paid.
+export async function grantSubscriptionYear(input: unknown) {
+  return action(async () => {
+    const me = await requireActor('admin');
+    const d = parse(z.object({ restaurantId: z.number().int(), note: note('Reason', 3) }), input);
+    const p = await subscriptions.grantYear(d.restaurantId, d.note, me.id);
+    const r = must(await db().from('restaurants').select('name').eq('id', d.restaurantId).single());
+    await log(me.id, 'subscription.grant', 'restaurant', d.restaurantId, `${r.name}: complimentary year to ${p.period_end?.slice(0, 10)} (${p.invoice_number}) - ${d.note}`);
+    return { paidThrough: p.period_end };
+  });
+}
+
 export async function updateSettings(input: unknown) {
   return action(async () => {
     const me = await requireActor('admin');
@@ -162,6 +156,8 @@ export async function updateSettings(input: unknown) {
         serviceFeePct: z.coerce.number().min(0, 'Service fee must be 0% to 30%.').max(30, 'Service fee must be 0% to 30%.'),
         defaultTaxRatePct: z.coerce.number().min(0, 'HST must be 0% to 20%.').max(20, 'HST must be 0% to 20%.'),
         requireRestaurantApproval: z.boolean(),
+        subscriptionFee: z.coerce.number().min(0, 'Subscription fee must be $0 to $10,000.').max(10_000, 'Subscription fee must be $0 to $10,000.'),
+        requireSubscription: z.boolean(),
       }),
       input,
     );
@@ -169,6 +165,8 @@ export async function updateSettings(input: unknown) {
       service_fee_bps: Math.round(d.serviceFeePct * 100),
       default_tax_rate_bps: Math.round(d.defaultTaxRatePct * 100),
       require_restaurant_approval: d.requireRestaurantApproval,
+      subscription_fee_cents: Math.round(d.subscriptionFee * 100),
+      require_subscription: d.requireSubscription,
     };
     const current = new Map(must(await db().from('settings').select('key, value')).map((r) => [r.key, r.value]));
     const changed = Object.entries(values).filter(([k, v]) => current.get(k) !== v);

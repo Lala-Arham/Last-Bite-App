@@ -5,7 +5,7 @@ import { config } from 'dotenv';
 import readline from 'node:readline';
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from '../src/lib/database.types';
-import { LEGAL_VERSION, REQUIRED } from '../src/lib/legal/documents';
+import { DOCUMENTS, REQUIRED } from '../src/lib/legal/documents';
 import { emailSchema, passwordSchema, usernameSchema } from '../src/lib/validate';
 
 config({ path: '.env.local' });
@@ -72,7 +72,7 @@ async function main() {
     email_confirm: true,
     user_metadata: {
       username, role: 'customer', ip: 'cli', user_agent: 'npm run create-admin',
-      accepted_terms: Object.fromEntries(REQUIRED.customer.map((d) => [d, LEGAL_VERSION])),
+      accepted_terms: Object.fromEntries(REQUIRED.customer.map((d) => [d, DOCUMENTS[d].version])),
     },
   });
   if (error) throw error;

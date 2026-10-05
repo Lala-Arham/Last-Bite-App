@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import localFont from 'next/font/local';
+import { HideOnKiosk } from '@/components/app/hide-on-kiosk';
 import { Providers } from '@/components/app/providers';
 import { SiteFooter } from '@/components/app/site-footer';
 import { SiteHeader } from '@/components/app/site-header';
@@ -49,9 +50,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html lang="en" className={`${inter.variable} ${jakarta.variable} ${plexMono.variable}`}>
       <body className="flex min-h-dvh flex-col font-sans">
         <Providers>
-          <SiteHeader viewer={viewer && { username: viewer.username, role: viewer.role, restaurantName: viewer.restaurant?.name ?? null, creditCents: viewer.creditCents }} />
+          <HideOnKiosk>
+            <SiteHeader viewer={viewer && { username: viewer.username, role: viewer.role, restaurantName: viewer.restaurant?.name ?? null, creditCents: viewer.creditCents }} />
+          </HideOnKiosk>
           <div className="flex-1">{children}</div>
-          <SiteFooter />
+          <HideOnKiosk><SiteFooter /></HideOnKiosk>
           {viewer && viewer.role !== 'admin' && viewer.pendingTerms.length > 0 && <TermsGate role={viewer.role} />}
         </Providers>
       </body>

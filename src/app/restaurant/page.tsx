@@ -19,6 +19,7 @@ export default async function RestaurantPage({ searchParams }: PageProps<'/resta
       serviceFeeBps={Number(fee?.value ?? 500)}
       map={publicEnv.map}
       paymentMode={paymentMode()}
+      stripePublishableKey={publicEnv.stripePublishableKey}
       initialTab={typeof tab === 'string' ? tab : 'pickup'}
       stripeReturn={stripe === 'return' || stripe === 'refresh'}
     />

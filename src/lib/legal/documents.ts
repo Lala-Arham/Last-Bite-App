@@ -1,17 +1,19 @@
-// Last Bite legal documents. Each document has a version; users must accept the current version of
-// every document required for their role before their account is created, and again whenever a
-// version changes. When you edit the text, change LEGAL_VERSION and EFFECTIVE here AND the versions
-// in the legal_documents table (add a migration); a test checks that they match.
+// Last Bite legal documents. Each document has its own version; users must accept the current version
+// of every document required for their role before their account is created, and again whenever a
+// version changes. When you edit a document, change its version and effective date in DOCUMENTS here
+// AND its version in the legal_documents table (add a migration); a test checks that they match.
 //
 // Company details come from LEGAL_ENTITY_NAME, SUPPORT_EMAIL and LEGAL_ADDRESS. Have a lawyer licensed in
 // Newfoundland and Labrador review these documents before launch.
 
 import type { Role } from '@/lib/constants';
 
-export const LEGAL_VERSION = '2026-10-01.1';
-export const EFFECTIVE = 'October 1, 2026';
+export type Company = {
+  entity: string; email: string; address: string; serviceFeePct: number; graceMinutes: number;
+  subscriptionFeeCents: number; subscriptionTaxPct: number;
+};
 
-export type Company = { entity: string; email: string; address: string; serviceFeePct: number; graceMinutes: number };
+const dollars = (cents: number) => `$${(cents / 100).toLocaleString('en-CA', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
 const esc = (s: string) =>
   s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] as string);
@@ -232,10 +234,28 @@ will cancel through Last Bite support so the customer's payment hold is released
 <p>5.1 <b>Customer payments.</b> Last Bite, through its payment processor Stripe, collects all payments from customers on your
 behalf as your limited payment collection agent. A customer's payment to Last Bite satisfies the customer's obligation to you.</p>
 <p>5.2 <b>Your proceeds.</b> For each completed order you are entitled to the food subtotal (the discounted price times quantity).
-Last Bite currently charges Partners <b>no commission</b>. Customers pay a separate Last Bite service fee (currently ${c.serviceFeePct}% of
-the food subtotal), which Last Bite keeps. We will give you at least 30 days' written notice before introducing or changing any fee
-charged to Partners.</p>
-<p>5.3 <b>Payouts through Stripe Connect.</b> Payouts are made through Stripe Connect. To be paid, you must create and verify a
+Last Bite charges Partners <b>no commission</b> on food sales. Customers pay a separate Last Bite service fee (currently ${c.serviceFeePct}% of
+the food subtotal), which Last Bite keeps. Apart from the subscription in Section 5.3, Last Bite charges Partners no other fees, and we
+will give you at least 30 days' written notice before introducing or changing any fee charged to Partners.</p>
+<p>5.3 <b>Partner subscription.</b> To post or resume Offers you need an active Last Bite partner subscription. It currently costs
+<b>${dollars(c.subscriptionFeeCents)} per year</b> plus HST (currently ${c.subscriptionTaxPct}%), paid in advance by card in the Partner Portal
+(Subscription tab).</p>
+<ul>
+  <li><b>Term:</b> each payment covers one year, starting on the day you pay, or at the end of your current paid year if you renew early.
+  You can renew from 60 days before your paid year ends.</li>
+  <li><b>No automatic renewal:</b> your card is charged only when you choose to pay for a year. If you do not renew, your subscription
+  ends at the end of the paid year. You then cannot post or resume Offers, but Offers already live run until their discard timers end,
+  you can still verify pickups for existing orders, and you are still paid for completed orders.</li>
+  <li><b>Invoices:</b> each payment has an invoice showing the HST, which you can download from the Partner Portal.</li>
+  <li><b>Refunds:</b> subscription fees are non-refundable, except that: (a) if Last Bite declines to approve your restaurant, it
+  refunds the fee in full; (b) Last Bite refunds the unused part of your paid year, pro rata, if Last Bite terminates this Agreement for
+  convenience, or if you terminate because you do not accept a material change under Section 12; and (c) where the law requires a
+  refund.</li>
+  <li><b>Price changes:</b> Last Bite may change the subscription price with at least 30 days' written notice. A new price applies only
+  to years paid for after it takes effect.</li>
+  <li><b>Complimentary periods:</b> Last Bite may, at its discretion, offer free or discounted subscription periods.</li>
+</ul>
+<p>5.4 <b>Payouts through Stripe Connect.</b> Payouts are made through Stripe Connect. To be paid, you must create and verify a
 Stripe Express account from the Partner Portal (Payouts tab) and keep it in good standing. By doing so you also agree to the
 <a href="https://stripe.com/connect-account/legal" target="_blank" rel="noopener">Stripe Connected Account Agreement</a>, which
 includes the Stripe Services Agreement.</p>
@@ -250,11 +270,11 @@ includes the Stripe Services Agreement.</p>
   each deposit.</li>
   <li><b>Questions:</b> raise any question about a payout within 60 days.</li>
 </ul>
-<p>5.4 <b>Taxes.</b> HST is charged to customers on sales made through the marketplace at the rate shown in your profile. Where
+<p>5.5 <b>Taxes.</b> HST is charged to customers on sales made through the marketplace at the rate shown in your profile. Where
 Last Bite is required under the <i>Excise Tax Act</i> (Canada) to collect and remit HST on those sales, it will do so; otherwise you are
 responsible for reporting and remitting HST on your sales. You remain responsible for all other taxes on your business, including
 income taxes.</p>
-<p>5.5 <b>Refunds, Platform Credit and chargebacks.</b> Last Bite will share a customer's complaint with you and consider your response
+<p>5.6 <b>Refunds, Platform Credit and chargebacks.</b> Last Bite will share a customer's complaint with you and consider your response
 before deciding on a refund. Last Bite may resolve a complaint in one of two ways:</p>
 <ul>
   <li><b>(a) Refund to the customer's original form of payment.</b> The refunded share of the food subtotal is taken back from you,
@@ -298,7 +318,7 @@ the claim arose.</p>
 <p>This Agreement starts when you accept it and continues until terminated. Either party may terminate for convenience with 14 days'
 written notice. Last Bite may suspend or terminate immediately if you breach Sections 2, 3 or 7, if food safety is at risk, or if
 required by law. On termination, your Offers are removed, open orders are cancelled and released, and Last Bite will pay out amounts
-owed for completed orders, less adjustments under Section 5.5.</p>
+owed for completed orders, less adjustments under Section 5.6. Subscription fees are refunded only as set out in Section 5.3.</p>
 
 <h2>12. Changes</h2>
 <p>We may update this Agreement. We will give you at least 30 days' notice of material changes by email or in the Partner Portal, and
@@ -395,9 +415,9 @@ to review it before continuing to use the service.</p>
 }
 
 export const DOCUMENTS = {
-  'customer-terms': { title: 'Customer Terms of Service', render: customerTerms },
-  'restaurant-agreement': { title: 'Restaurant Partner Agreement', render: restaurantAgreement },
-  privacy: { title: 'Privacy Policy', render: privacyPolicy },
+  'customer-terms': { title: 'Customer Terms of Service', render: customerTerms, version: '2026-10-01.1', effective: 'October 1, 2026' },
+  'restaurant-agreement': { title: 'Restaurant Partner Agreement', render: restaurantAgreement, version: '2026-10-04.1', effective: 'October 4, 2026' },
+  privacy: { title: 'Privacy Policy', render: privacyPolicy, version: '2026-10-01.1', effective: 'October 1, 2026' },
 } as const;
 
 export type DocumentId = keyof typeof DOCUMENTS;
@@ -414,8 +434,8 @@ export function renderDocument(id: string, company: Company): LegalDocument | nu
   if (!(id in DOCUMENTS)) return null;
   const def = DOCUMENTS[id as DocumentId];
   const c = { ...company, entity: esc(company.entity), email: esc(company.email), address: esc(company.address) };
-  return { id: id as DocumentId, title: def.title, version: LEGAL_VERSION, effective: EFFECTIVE, html: def.render(c) };
+  return { id: id as DocumentId, title: def.title, version: def.version, effective: def.effective, html: def.render(c) };
 }
 
 export const requiredDocuments = (role: Exclude<Role, 'admin'>) =>
-  REQUIRED[role].map((id) => ({ id, title: DOCUMENTS[id].title, version: LEGAL_VERSION }));
+  REQUIRED[role].map((id) => ({ id, title: DOCUMENTS[id].title, version: DOCUMENTS[id].version }));

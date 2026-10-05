@@ -1,20 +1,20 @@
 {
   "voice": "af_heart",
   "speed": 1.0,
-  "pronounce": { "PINs": "pins", "PIN": "pin", "St.": "Saint" },
+  "pronounce": { "PINs": "pins", "PIN": "pin" },
   "customer": [
-    { "id": "welcome", "text": "Hi there, and welcome to Last Bite! Restaurants around St. John's post their surplus food, like wrong orders and end-of-day extras, at up to seventy percent off." },
+    { "id": "welcome", "text": "Hi there, and welcome to Last Bite! Restaurants near you post their surplus food, like wrong orders and end-of-day extras, at up to seventy percent off." },
     { "id": "login", "text": "Create a free account, then log in with your email or user name." },
     { "id": "deals", "text": "You'll see live deals near you, with a countdown showing how long each one is available." },
     { "id": "search", "text": "Search by dish, restaurant, town, or postal code." },
     { "id": "quantity", "text": "Pick a deal, and choose how many you want." },
-    { "id": "total", "text": "You see the full total before you order: the food, a small service fee, and HST." },
+    { "id": "total", "text": "You see the full total before you order: the food, a small service fee, and tax." },
     { "id": "payment", "text": "Use your Last Bite credit, and pay the rest with a saved or new card." },
     { "id": "hold", "text": "Your card is only held for now. It's charged when you pick up your food." },
     { "id": "pin", "text": "Done! You get a four-digit PIN. Show it at the counter when you pick up." },
     { "id": "orders", "text": "Your orders and PINs are always under My orders." },
     { "id": "receipt", "text": "And every order comes with a receipt you can print or download." },
-    { "id": "end", "text": "That's Last Bite. Great food, less waste. Happy eating, St. John's!" }
+    { "id": "end", "text": "That's Last Bite. Great food, less waste. Happy eating!" }
   ],
   "restaurant": [
     { "id": "welcome", "text": "Hi there! Last Bite helps restaurants turn surplus food into revenue, in under a minute." },

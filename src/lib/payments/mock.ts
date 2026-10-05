@@ -55,6 +55,15 @@ export function createMockProvider(): PaymentProvider {
 
     async void() {},
 
+    async charge({ paymentRef }) {
+      if (paymentRef.endsWith('_0002')) throw new PaymentError('Your card was declined.');
+      return { ref: id('pi'), status: 'succeeded' };
+    },
+
+    async chargeStatus(ref) {
+      return ref.startsWith('pi_mock_') ? 'succeeded' : 'failed';
+    },
+
     async createConnectedAccount({ restaurantId }) {
       return `acct_mock_${String(restaurantId).padStart(6, '0')}`;
     },

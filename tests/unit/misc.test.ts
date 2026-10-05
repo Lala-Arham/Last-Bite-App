@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { code128, PATTERNS } from '@/lib/code128';
 import { distanceKm } from '@/lib/geo';
 import { money, pct, timeLeft } from '@/lib/format';
-import { LEGAL_VERSION, renderDocument, requiredDocuments } from '@/lib/legal/documents';
+import { DOCUMENTS, renderDocument, requiredDocuments } from '@/lib/legal/documents';
 import { dayRange, todayIn } from '@/lib/receipts/time';
 
 describe('geo', () => {
@@ -44,17 +44,20 @@ describe('Pacific time days', () => {
 });
 
 describe('legal documents', () => {
-  const company = { entity: 'Last Bite <LLC>', email: 'help@example.com', address: "St. John's", serviceFeePct: 5, graceMinutes: 10 };
+  const company = { entity: 'Last Bite <LLC>', email: 'help@example.com', address: "St. John's", serviceFeePct: 5, graceMinutes: 10, subscriptionFeeCents: 10000, subscriptionTaxPct: 15 };
   it('lists what each role must accept', () => {
     expect(requiredDocuments('customer').map((d) => d.id)).toEqual(['customer-terms', 'privacy']);
     expect(requiredDocuments('restaurant').map((d) => d.id)).toEqual(['restaurant-agreement', 'privacy']);
   });
   it('renders with escaped company details and the live service fee', () => {
     const doc = renderDocument('customer-terms', company)!;
-    expect(doc.version).toBe(LEGAL_VERSION);
+    expect(doc.version).toBe(DOCUMENTS['customer-terms'].version);
     expect(doc.html).toContain('Last Bite &lt;LLC&gt;');
     expect(doc.html).toContain('currently 5% of the food subtotal');
-    expect(renderDocument('restaurant-agreement', company)!.html).toContain('Stripe Connect');
+    const agreement = renderDocument('restaurant-agreement', company)!;
+    expect(agreement.html).toContain('Stripe Connect');
+    expect(agreement.html).toContain('<b>$100 per year</b> plus HST (currently 15%)');
+    expect(agreement.version).toBe(DOCUMENTS['restaurant-agreement'].version);
     expect(renderDocument('nope', company)).toBeNull();
   });
 });
