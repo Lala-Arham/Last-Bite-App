@@ -144,6 +144,7 @@ export async function restaurants(params: URLSearchParams) {
       ownerEmail: owner.get(r.owner_id)?.email ?? '', ownerUsername: owner.get(r.owner_id)?.username ?? '',
       activeOffers: count(offers, r.id), orders: count(sold, r.id), foodCents: count(sold, r.id, (x) => x.subtotal_cents),
       stripeReady: !!acct.get(r.id)?.charges_enabled, stripeAccount: acct.get(r.id)?.stripe_account_id ?? null,
+      ownerId: r.owner_id, deleted: owner.get(r.owner_id)?.status === 'deleted' || !owner.get(r.owner_id),
       subscriptionPaidThrough: paidThrough.get(r.id) ?? null,
       subscriptionActive: Date.parse(paidThrough.get(r.id) ?? '') > Date.now(),
     }))
