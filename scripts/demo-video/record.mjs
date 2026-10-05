@@ -51,6 +51,74 @@ const OVERLAY = () => {
     }, true);
     addEventListener('mouseup', () => cursor.classList.remove('down'), true);
   };
+  // The tours are universal: the app is localized for St. John's, NL, but the video shows no place
+  // names or local tax names. Text on screen is rewritten as it appears (the app itself is unchanged).
+  const SCRUB = [
+    [/Now serving St\. John['’]s (&|and) the Northeast Avalon/g, 'Now serving restaurants near you'],
+    [/,?\s*St\. John['’]s(,\s*(NL|Newfoundland and Labrador))?(\s+[A-Z]\d[A-Z] ?\d[A-Z]\d)?/g, ''],
+    [/,?\s*(Newfoundland and Labrador|Northeast Avalon)/g, ''],
+    [/\bHST\b/g, 'tax'],
+    [/Newfoundland Time/g, 'local time'],
+  ];
+  // React often splits one line into several text nodes ("288 Water St", ", ", "St. John's"), so each
+  // run of neighbouring text nodes is rewritten as a whole: the result goes in the first node.
+  const SKIP = /^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA)$/;
+  const rewrite = (text) => {
+    let v = text;
+    for (const [re, to] of SCRUB) v = v.replace(re, to);
+    if (v === text) return null;
+    return v.replace(/^(\s*)tax\b/, '$1Tax').replace(/\s*·\s*$/, '').replace(/^\s*·\s*/, '').replace(/\s*·\s*·\s*/g, ' · ');
+  };
+  const scrubElement = (el) => {
+    if (!el || SKIP.test(el.nodeName)) return;
+    let run = [];
+    const flush = () => {
+      if (run.length) {
+        const v = rewrite(run.map((n) => n.nodeValue).join(''));
+        if (v !== null) run.forEach((n, i) => { n.nodeValue = i === 0 ? v : ''; });
+      }
+      run = [];
+    };
+    for (const child of el.childNodes) {
+      if (child.nodeType === 3) run.push(child);
+      else flush();
+    }
+    flush();
+  };
+  const scrub = (root) => {
+    if (root.nodeType === 3) return scrubElement(root.parentElement);
+    if (root.nodeType !== 1) return;
+    scrubElement(root);
+    root.querySelectorAll('*').forEach(scrubElement);
+  };
+  const watch = () => {
+    window.__rbScrubbing = true;
+    scrub(document.body);
+    new MutationObserver((list) => {
+      for (const m of list) {
+        if (m.type === 'characterData') scrubElement(m.target.parentElement);
+        else m.addedNodes.forEach(scrub);
+      }
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  };
+  // Rewrite only after React has hydrated the page (changing server-rendered text earlier causes a
+  // hydration mismatch); until then the page is hidden, so the original text never shows on video.
+  // A constructed stylesheet: it exists before <html> does and isn't part of the DOM React hydrates.
+  const hide = new CSSStyleSheet();
+  hide.replaceSync('body { visibility: hidden !important; }');
+  document.adoptedStyleSheets = [...document.adoptedStyleSheets, hide];
+  // Hydrated = the page has loaded and every element in <main> and <footer> belongs to React.
+  const owned = (el) => Object.keys(el).some((k) => k.startsWith('__reactFiber'));
+  const hydrated = () => document.readyState === 'complete'
+    && [...document.querySelectorAll('main, main *, footer, footer *')].every(owned)
+    && !!document.querySelector('main');
+  const started = Date.now();
+  const whenHydrated = () => {
+    if (!document.body || (!hydrated() && Date.now() - started < 6000)) return setTimeout(whenHydrated, 50);
+    watch();
+    document.adoptedStyleSheets = document.adoptedStyleSheets.filter((x) => x !== hide);
+  };
+  whenHydrated();
   if (document.readyState === 'loading') addEventListener('DOMContentLoaded', add);
   else add();
   // Client-side navigation can replace <body> content; re-add if it disappears.
@@ -95,7 +163,7 @@ function narrator(tour) {
 
 // End screen: fades in over the last page, pops in the Last Bite logo piece by piece and says goodbye.
 const OUTRO = {
-  customer: { headline: "Happy eating, St. John's!", line: 'Great food. Great prices. Less waste.', pill: "Free to join · St. John's, NL" },
+  customer: { headline: 'Happy eating!', line: 'Great food. Great prices. Less waste.', pill: 'Free to join · Pay at pickup' },
   restaurant: { headline: 'Happy cooking, zero waste.', line: 'Less waste. More guests.', pill: 'Free to join · Paid through Stripe' },
 };
 
