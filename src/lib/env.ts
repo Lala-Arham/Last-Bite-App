@@ -30,6 +30,14 @@ export const serverEnv = {
   },
   // Last Bite's GST/HST registration number, printed on subscription invoices.
   hstNumber: process.env.HST_REGISTRATION_NUMBER ?? '',
+  // Outgoing email for restaurant onboarding (see src/lib/email/send.ts).
+  smtp: {
+    host: process.env.SMTP_HOST ?? '',
+    port: int(process.env.SMTP_PORT, 587),
+    user: process.env.SMTP_USER ?? '',
+    pass: process.env.SMTP_PASS ?? '',
+    from: process.env.EMAIL_FROM || 'Last Bite <hello@lastbite.ca>',
+  },
   // Orders not picked up are released (never charged) this long after the discard timer ends.
   pickupGraceMinutes: int(process.env.PICKUP_GRACE_MINUTES, 10),
 };

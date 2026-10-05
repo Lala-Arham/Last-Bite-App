@@ -6,6 +6,7 @@ import { requireActor } from '@/lib/auth';
 import { action, AppError, check, must } from '@/lib/errors';
 import { money } from '@/lib/format';
 import * as orders from '@/lib/orders';
+import { onApproved } from '@/lib/onboarding';
 import * as subscriptions from '@/lib/subscriptions';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { SUSPENSION_DAYS } from '@/lib/constants';
@@ -21,7 +22,9 @@ export async function setRestaurantStatus(input: unknown) {
     const d = parse(z.object({ id: z.number().int(), status: z.enum(['approved', 'suspended', 'pending']), note: note('Note').default('') }), input);
     const r = must(await db().from('restaurants').update({ status: d.status, admin_note: d.note }).eq('id', d.id).select('id, name').maybeSingle());
     await log(me.id, `restaurant.${d.status}`, 'restaurant', r.id, `${r.name}${d.note ? `: ${d.note}` : ''}`);
-    return null;
+    // First approval: Last Bite countersigns the Partner Agreement and the welcome email goes out (once).
+    const welcomed = d.status === 'approved' ? await onApproved(r.id) : false;
+    return { welcomed };
   });
 }
 

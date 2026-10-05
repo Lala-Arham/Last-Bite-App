@@ -206,6 +206,46 @@ For a project on supabase.com, install it with `npm run email:template`. It uplo
 
 Keep **Authentication → URL Configuration → Site URL** set to your site's address: the button links to `<Site URL>/auth/confirm`. After signing up, people see a "Check your email" page with **Resend confirmation email** (once a minute) and **Back to login**; trying to log in before confirming offers the resend button too.
 
+### Restaurant onboarding emails
+
+Restaurants get three emails:
+
+1. **Confirm your email** at sign-up. Supabase Auth sends it (`supabase/templates/confirmation.html`). Turn on **Confirm email** in your Supabase project (Authentication → Providers → Email).
+2. **Application pending.** The app sends this after the owner clicks the confirmation link (`/auth/confirm`). If email confirmation is off, it goes out at sign-up instead.
+3. **Welcome**, when you approve the restaurant in the owner console. It includes:
+   - the **electronically signed Restaurant Partner Agreement** as a PDF;
+   - the restaurant's **kiosk link**;
+   - **Download for Android tablet** and **Download for iPad** buttons.
+
+   If approval isn't required, it goes out once the owner's email is verified.
+
+Each automatic email is sent once (`restaurant_emails`). The owner can resend the welcome pack from the Partner Portal (**Kiosk** tab).
+
+The app's own emails need SMTP. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `EMAIL_FROM`; any provider works, such as Resend, Postmark, SendGrid or Amazon SES. Locally they land in the Supabase inbox at http://127.0.0.1:54324.
+
+The signed agreement PDF (`/api/restaurant/agreement`) contains:
+- the agreement text;
+- the owner's acceptance record: time, version, IP address and device, captured when they ticked "I agree" at sign-up;
+- Last Bite's countersignature (the first approval time);
+- a SHA-256 fingerprint of the text.
+
+### Restaurant kiosk
+
+Each restaurant has a secret kiosk link, `/kiosk/<token>`, for the tablet at its counter. It's a full-screen screen for staff:
+- a big PIN pad to hand over orders (the card is charged at that moment, as in the Partner Portal);
+- a bell and banner for every new order, checked every 5 seconds;
+- the orders waiting for pickup and today's totals;
+- **Post surplus food** in a few taps (needs an active subscription).
+
+It keeps the screen awake. It doesn't use a login and can't see payouts or settings. The token (192 random bits) is the key, and owners can reset it in the **Kiosk** tab. A reset logs out every tablet using the old link.
+
+Putting it on a tablet's home screen (`/kiosk/<token>/install`, linked from the welcome email and the Kiosk tab):
+
+- **Android (Chrome):** the kiosk is an installable web app (per-restaurant manifest and a service worker), so **Install** puts the restaurant's icon on the home screen. The tablet still asks the owner to confirm with one tap; no website can add an icon silently.
+- **iPad (Safari):** **Download** gives a small configuration profile (`.mobileconfig`) containing a full-screen Web Clip. After **Settings → Profile Downloaded → Install**, the icon is on the home screen. Safari's **Share → Add to Home Screen** works too.
+  - The profile is unsigned, so iPadOS labels it "Not Signed". Sign it with an Apple-trusted certificate to remove that label.
+- Opened on another device (such as the owner's computer), the install page shows a QR code to scan with the tablet.
+
 ### Password reset
 
 **Forgot password?** on the log-in page opens `/forgot-password`: the user enters their registered email, receives a **6-digit verification code** (`supabase/templates/recovery.html`, Supabase's "Reset password" email), types it in, then chooses a new password (same rules as sign-up). The page gives the same answer whether or not the email has an account, so it can't be used to find out who is registered. Codes work once and expire after an hour (`otp_expiry`); after 5 wrong codes for an address, it has to wait 15 minutes. Only a browser that just verified a code can set the new password (a short-lived cookie), and saving it signs the account out everywhere else. `npm run email:template` installs this email too; locally, read the codes at [127.0.0.1:54324](http://127.0.0.1:54324) (Mailpit).

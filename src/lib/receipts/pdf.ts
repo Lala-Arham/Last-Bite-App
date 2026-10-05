@@ -355,3 +355,143 @@ export function subscriptionInvoicePdf(inv: SubscriptionInvoice) {
   );
   return finish(doc);
 }
+
+// ---------------------------------------------------------------- signed Partner Agreement
+
+export type SignedAgreement = {
+  title: string;
+  version: string;
+  effective: string;
+  html: string;
+  fingerprint: string;
+  restaurant: { name: string; address: string; city: string; zip: string };
+  signer: { username: string; email: string };
+  acceptance: { atText: string; version: string; ip: string; userAgent: string } | null;
+  countersign: { entity: string; atText: string | null };
+  generatedText: string;
+};
+
+const decode = (s: string) =>
+  s.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
+
+// The agreement's HTML (headings, paragraphs, lists, bold) as blocks of text runs.
+function agreementBlocks(html: string) {
+  const blocks: { kind: 'h2' | 'p' | 'li'; runs: { text: string; bold: boolean }[] }[] = [];
+  for (const m of html.matchAll(/<(h2|p|li)\b[^>]*>([\s\S]*?)<\/\1>/g)) {
+    const runs: { text: string; bold: boolean }[] = [];
+    let bold = false;
+    for (const part of m[2].split(/(<\/?b>)/)) {
+      if (part === '<b>') bold = true;
+      else if (part === '</b>') bold = false;
+      else {
+        const text = decode(part.replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ');
+        if (text.trim()) runs.push({ text, bold });
+      }
+    }
+    if (runs.length) {
+      runs[0].text = runs[0].text.trimStart();
+      blocks.push({ kind: m[1] as 'h2' | 'p' | 'li', runs });
+    }
+  }
+  return blocks;
+}
+
+// A copy of the Restaurant Partner Agreement with the record of the owner's electronic acceptance
+// and Last Bite's countersignature (on approval). Portrait letter, numbered pages.
+export function signedAgreementPdf(a: SignedAgreement) {
+  const doc = new PDFDocument({ size: 'LETTER', margin: 54, bufferPages: true, info: { Title: `${a.title} (signed) - ${a.restaurant.name}`, Author: 'Last Bite' } });
+  fonts(doc);
+  const L = 54;
+  const R = doc.page.width - 54;
+  const W = R - L;
+  const bottom = () => doc.page.height - 70;
+
+  doc.image(LOGO, L, 48, { height: 34 });
+  doc.font('head').fontSize(18).fillColor(INK).text(a.title, L, 48, { width: W, align: 'right' });
+  doc.font('regular').fontSize(9).fillColor(MUTED).text(`Version ${a.version} · effective ${a.effective} · signed copy`, L, 72, { width: W, align: 'right' });
+  rule(doc, L, R, 96);
+  doc.font('regular').fontSize(9.5).fillColor(INK).text(
+    `Between ${a.countersign.entity} ("Last Bite") and ${a.restaurant.name}, ${a.restaurant.address}, ${a.restaurant.city}, NL ${a.restaurant.zip} (the "Partner"). `
+      + 'The electronic signature record is on the last page.',
+    L, 108, { width: W },
+  );
+  doc.moveDown(0.8);
+
+  const ensure = (h: number) => {
+    if (doc.y + h > bottom()) {
+      doc.addPage();
+      doc.y = 60;
+    }
+  };
+  for (const b of agreementBlocks(a.html)) {
+    const x = b.kind === 'li' ? L + 14 : L;
+    const width = b.kind === 'li' ? W - 14 : W;
+    const size = b.kind === 'h2' ? 12 : 9.2;
+    ensure(b.kind === 'h2' ? 40 : 24);
+    if (b.kind === 'h2') doc.moveDown(0.5);
+    if (b.kind === 'li') doc.font('bold').fontSize(size).fillColor(GREEN).text('•', L + 3, doc.y, { lineBreak: false });
+    const y = doc.y;
+    b.runs.forEach((r, i) => {
+      doc.font(b.kind === 'h2' || r.bold ? 'bold' : 'regular').fontSize(size).fillColor(INK);
+      const last = i === b.runs.length - 1;
+      if (i === 0) doc.text(r.text, x, y, { width, lineGap: 1.6, continued: !last });
+      else doc.text(r.text, { width, lineGap: 1.6, continued: !last });
+    });
+    doc.moveDown(b.kind === 'h2' ? 0.3 : 0.45);
+  }
+
+  // Signature record
+  doc.addPage();
+  doc.font('head').fontSize(16).fillColor(INK).text('Electronic signature record', L, 60);
+  doc.font('regular').fontSize(9.5).fillColor(MUTED).text(
+    'The Partner accepted this Agreement electronically in the Last Bite sign-up form by scrolling through it and selecting "I agree" '
+      + 'before creating the restaurant account. Under Newfoundland and Labrador\'s Electronic Commerce Act, that acceptance has the same effect as a signature.',
+    L, 86, { width: W, lineGap: 1.5 },
+  );
+  let y = doc.y + 16;
+  const row = (k: string, v: string) => {
+    doc.font('bold').fontSize(8).fillColor(MUTED).text(k.toUpperCase(), L, y, { width: 150, characterSpacing: 0.6 });
+    doc.font('regular').fontSize(10).fillColor(INK).text(v || '-', L + 160, y - 1, { width: W - 160, lineGap: 1.5 });
+    y = Math.max(doc.y, y + 12) + 10;
+  };
+  const box = (title: string, rows: [string, string][]) => {
+    doc.roundedRect(L, y, W, 26, 6).fill('#fff4ec');
+    doc.font('bold').fontSize(10.5).fillColor(INK).text(title, L + 12, y + 8);
+    y += 38;
+    for (const [k, v] of rows) row(k, v);
+    y += 6;
+  };
+  box('Signed by the Partner', [
+    ['Partner', `${a.restaurant.name}, ${a.restaurant.address}, ${a.restaurant.city}, NL ${a.restaurant.zip}`],
+    ['Signed by', `${a.signer.username} (${a.signer.email}), owner account`],
+    ['Accepted on', a.acceptance ? `${a.acceptance.atText} (Newfoundland Time)` : 'No acceptance on record'],
+    ['Version accepted', a.acceptance ? a.acceptance.version + (a.acceptance.version === a.version ? '' : ` (this copy shows version ${a.version})`) : ''],
+    ['IP address', a.acceptance?.ip ?? ''],
+    ['Device', a.acceptance?.userAgent ?? ''],
+  ]);
+  box('Countersigned by Last Bite', [
+    ['Company', a.countersign.entity],
+    ['Approved on', a.countersign.atText ? `${a.countersign.atText} (Newfoundland Time)` : 'Not approved yet'],
+  ]);
+  box('Document', [
+    ['Title', `${a.title}, version ${a.version}, effective ${a.effective}`],
+    ['SHA-256 fingerprint', a.fingerprint],
+    ['Copy generated', `${a.generatedText} (Newfoundland Time)`],
+  ]);
+  doc.font('regular').fontSize(8).fillColor(MUTED).text(
+    'The fingerprint identifies the exact text of this version: any change to the text gives a different fingerprint. Last Bite keeps the acceptance record '
+      + '(time, IP address and device) for as long as the Agreement is in force and as required by law.',
+    L, y + 4, { width: W, lineGap: 1.4 },
+  );
+
+  const pages = doc.bufferedPageRange();
+  for (let i = 0; i < pages.count; i++) {
+    doc.switchToPage(i);
+    doc.page.margins.bottom = 0; // the footer sits below the text area; don't let it start a new page
+    doc.font('regular').fontSize(7.5).fillColor(MUTED).text(
+      `${a.title} · ${a.restaurant.name} · signed copy · page ${i + 1} of ${pages.count}`,
+      L, doc.page.height - 44, { width: W, align: 'center', lineBreak: false },
+    );
+  }
+  return finish(doc);
+}

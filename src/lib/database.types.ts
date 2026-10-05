@@ -324,6 +324,56 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"restaurant_emails": {
+                  Row: {
+                    "kind": string,"restaurant_id": number,"sent_at": string
+                  }
+                  Insert: {
+                    "kind": string,"restaurant_id": number,"sent_at"?: string
+                  }
+                  Update: {
+                    "kind"?: string,"restaurant_id"?: number,"sent_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "restaurant_emails_restaurant_id_fkey"
+      columns: ["restaurant_id"]
+isOneToOne: false
+      referencedRelation: "restaurant_balances"
+      referencedColumns: ["restaurant_id"]
+    },{
+      foreignKeyName: "restaurant_emails_restaurant_id_fkey"
+      columns: ["restaurant_id"]
+isOneToOne: false
+      referencedRelation: "restaurants"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"restaurant_kiosks": {
+                  Row: {
+                    "created_at": string,"last_seen_at": string | null,"restaurant_id": number,"token": string
+                  }
+                  Insert: {
+                    "created_at"?: string,"last_seen_at"?: string | null,"restaurant_id": number,"token": string
+                  }
+                  Update: {
+                    "created_at"?: string,"last_seen_at"?: string | null,"restaurant_id"?: number,"token"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "restaurant_kiosks_restaurant_id_fkey"
+      columns: ["restaurant_id"]
+isOneToOne: true
+      referencedRelation: "restaurant_balances"
+      referencedColumns: ["restaurant_id"]
+    },{
+      foreignKeyName: "restaurant_kiosks_restaurant_id_fkey"
+      columns: ["restaurant_id"]
+isOneToOne: true
+      referencedRelation: "restaurants"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"restaurant_payment_accounts": {
                   Row: {
                     "bank_summary": string,"charges_enabled": boolean,"details_submitted": boolean,"payouts_enabled": boolean,"restaurant_id": number,"stripe_account_id": string | null,"updated_at": string
@@ -351,13 +401,13 @@ isOneToOne: true
                   ]
                 },"restaurants": {
                   Row: {
-                    "address": string,"admin_note": string,"city": string,"created_at": string,"cuisine": string,"description": string,"id": number,"lat": number | null,"lng": number | null,"location": unknown,"name": string,"owner_id": string,"phone": string,"status": Database["public"]['Enums']["restaurant_status"],"tax_rate_bps": number,"zip": string
+                    "address": string,"admin_note": string,"approved_at": string | null,"city": string,"created_at": string,"cuisine": string,"description": string,"id": number,"lat": number | null,"lng": number | null,"location": unknown,"name": string,"owner_id": string,"phone": string,"status": Database["public"]['Enums']["restaurant_status"],"tax_rate_bps": number,"zip": string
                   }
                   Insert: {
-                    "address": string,"admin_note"?: string,"city": string,"created_at"?: string,"cuisine"?: string,"description"?: string,"id"?: number,"lat"?: never,"lng"?: never,"location"?: unknown,"name": string,"owner_id": string,"phone"?: string,"status"?: Database["public"]['Enums']["restaurant_status"],"tax_rate_bps": number,"zip": string
+                    "address": string,"admin_note"?: string,"approved_at"?: string | null,"city": string,"created_at"?: string,"cuisine"?: string,"description"?: string,"id"?: number,"lat"?: never,"lng"?: never,"location"?: unknown,"name": string,"owner_id": string,"phone"?: string,"status"?: Database["public"]['Enums']["restaurant_status"],"tax_rate_bps": number,"zip": string
                   }
                   Update: {
-                    "address"?: string,"admin_note"?: string,"city"?: string,"created_at"?: string,"cuisine"?: string,"description"?: string,"id"?: number,"lat"?: never,"lng"?: never,"location"?: unknown,"name"?: string,"owner_id"?: string,"phone"?: string,"status"?: Database["public"]['Enums']["restaurant_status"],"tax_rate_bps"?: number,"zip"?: string
+                    "address"?: string,"admin_note"?: string,"approved_at"?: string | null,"city"?: string,"created_at"?: string,"cuisine"?: string,"description"?: string,"id"?: number,"lat"?: never,"lng"?: never,"location"?: unknown,"name"?: string,"owner_id"?: string,"phone"?: string,"status"?: Database["public"]['Enums']["restaurant_status"],"tax_rate_bps"?: number,"zip"?: string
                   }
                   Relationships: [
                     {
@@ -463,7 +513,13 @@ isOneToOne: false
                 }
           }
           Functions: {
-            "_orderable_offer":
+            "_begin_pickup":
+{ Args: { "p_order_id": number,"p_pin": string,"p_restaurant_id": number }; Returns: Json
+                           },
+"_find_pickup":
+{ Args: { "p_pin": string,"p_restaurant_id": number }; Returns: Json
+                           },
+"_orderable_offer":
 { Args: { "p_lock": boolean,"p_offer_id": number,"p_quantity": number }; Returns: {
               "created_at": string,
 "description": string,
@@ -495,6 +551,32 @@ isOneToOne: false
 "_random_pin":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"_save_offer":
+{ Args: { "p_description": string,"p_discount_pct": number,"p_expires_in_minutes": number,"p_menu_item_id": number,"p_offer_id": number,"p_quantity": number,"p_reason": Database["public"]['Enums']["offer_reason"],"p_restaurant_id": number }; Returns: {
+              "created_at": string,
+"description": string,
+"dietary": (string)[],
+"discount_pct": number,
+"id": number,
+"image_url": string | null,
+"menu_item_id": number | null,
+"original_price_cents": number,
+"pickup_end": string,
+"pickup_start": string,
+"price_cents": number | null,
+"quantity_available": number,
+"quantity_total": number,
+"reason": Database["public"]['Enums']["offer_reason"],
+"restaurant_id": number,
+"status": Database["public"]['Enums']["offer_status"],
+"title": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "offers"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
 "_subscription_price":
 { Args: Record<PropertyKey, never>; Returns: Json
                            },

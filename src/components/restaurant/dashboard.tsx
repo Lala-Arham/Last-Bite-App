@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { BadgeCheck, Banknote, Bell, BellOff, ClipboardList, FileText, KeyRound, Plus, Store, Tag, UtensilsCrossed } from 'lucide-react';
+import { BadgeCheck, Banknote, MonitorSmartphone, Bell, BellOff, ClipboardList, FileText, KeyRound, Plus, Store, Tag, UtensilsCrossed } from 'lucide-react';
 import { DemoVideoButton } from '@/components/app/demo-video';
 import type { MapConfig } from '@/components/offers/types';
 import { Alert } from '@/components/ui/alert';
@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { fmtDate, fmtTime, money, pct } from '@/lib/format';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import { isUnlocked, ringBell, unlockOnInteraction } from './bell';
+import { KioskPanel } from './kiosk-panel';
 import { MenuPanel } from './menu-panel';
 import { OfferFormDialog } from './offer-form-dialog';
 import { OffersPanel } from './offers-panel';
@@ -187,6 +188,7 @@ export function RestaurantDashboard({ restaurant, serviceFeeBps, map, paymentMod
           <TabsTrigger value="orders"><ClipboardList /> Orders</TabsTrigger>
           <TabsTrigger value="payouts"><Banknote /> Payouts</TabsTrigger>
           <TabsTrigger value="subscription"><BadgeCheck /> Subscription</TabsTrigger>
+          <TabsTrigger value="kiosk"><MonitorSmartphone /> Kiosk</TabsTrigger>
           <TabsTrigger value="profile"><Store /> Profile</TabsTrigger>
         </TabsList>
         <TabsContent value="pickup"><PickupPanel /></TabsContent>
@@ -195,6 +197,7 @@ export function RestaurantDashboard({ restaurant, serviceFeeBps, map, paymentMod
         <TabsContent value="orders"><OrdersPanel restaurantId={restaurant.id} /></TabsContent>
         <TabsContent value="payouts"><PayoutsPanel ctx={ctx} stripeReturn={stripeReturn} /></TabsContent>
         <TabsContent value="subscription"><SubscriptionPanel ctx={ctx} /></TabsContent>
+        <TabsContent value="kiosk"><KioskPanel ctx={ctx} /></TabsContent>
         <TabsContent value="profile"><ProfilePanel ctx={ctx} /></TabsContent>
       </Tabs>
 
